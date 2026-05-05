@@ -1,9 +1,10 @@
 import torch
 
 class GoalFrameTransform:
-    def __init__(self, scale=10.0, v_max=2.0):
+    def __init__(self, scale=10.0, v_max=2.0, c_max=100):
         self.scale = scale
         self.v_max = v_max
+        self.c_max = c_max
 
     def transform_pose(self, x, y, angle, gx, gy, ga):
         dx, dy = x - gx, y - gy
@@ -21,3 +22,7 @@ class GoalFrameTransform:
         nvy = vx * sin_t + vy * cos_t
         
         return nvx / self.v_max, nvy / self.v_max, va / self.v_max
+    
+    def normalize_context(self, context):
+        for i in range(len(context)):
+            context[i] = context[i] / self.c_max

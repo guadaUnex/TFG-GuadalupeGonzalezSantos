@@ -1,6 +1,8 @@
 import os
 import json
 import torch
+import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from torch_geometric.data import Dataset, HeteroData
 from transforms import GoalFrameTransform
@@ -12,6 +14,8 @@ class SocNavHeteroDataset(Dataset):
 
         with open(os.path.join(path, 'split', data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
+
+        self.context_df = pd.read_csv('../../../dataset/contexts/anthropic_claude_context.csv', index_col='context')
 
         self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
             
@@ -48,7 +52,9 @@ class SocNavHeteroDataset(Dataset):
                 json_data = json.load(f)
 
             walls = json_data.get('walls', [])
-            context = json_data.get('context_description',[])
+            context_desc = json_data.get('context_description',[])
+            context = list(self.context_df.loc[context_desc.rstrip()].to_dict().values())
+            self.transformer.normalize_context(context)
 
             trayectoria = []
 
@@ -117,9 +123,9 @@ class SocNavHeteroDataset(Dataset):
             data['wall'].x = torch.empty((0, 2))
 
         # Scenario node
-        shape_id = 1.0 if r['shape']['type'] == 'rectangle' else 0.0
-        scenario_features = context + [shape_id, r['shape']['width']/s, r['shape']['length']/s]
-        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
+        scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
+        print(scenario_features)
+        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float64)
        
         data = self._create_edges(data, full_conexo=full_conexo)
 
@@ -245,12 +251,9 @@ if __name__ == "__main__":
         print(f"🏢 Escenario: {s_x.shape}")
         if s_x.numel() > 0:
             # Mostramos el contexto (la primera fila del tensor)
-            print(f"   - 📝 Contexto: {s_x[0].tolist()}")
-            # Mostramos el shapeID y las dimensiones normalizadas
-            if s_x.shape[0] > 1:
-                print(f"   - 📐 ShapeID: {s_x[1, 0].item():.2f} | Size Robot Norm: {s_x[1, 1:].tolist()}")
-            else:
-                print(f"   - 📐 ShapeID: {s_x[0, 0].item():.2f} | Size Robot Norm: {s_x[0, 1:].tolist()}")
+            print(f"   - 📝 Contexto: {s_x[2:].tolist()}")
+            # Mostramos las dimensiones normalizadas
+            print(f"   - 📐 Size Robot Norm: {s_x[:2].tolist()}")
 
         print("\n--- 🔗 TEST DE ARISTAS (RELACIONES) ---")
         
