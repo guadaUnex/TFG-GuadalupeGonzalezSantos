@@ -11,9 +11,9 @@ import pandas as pd
 import numpy as np
 
 from torch.utils.data import Dataset
-from data_conversions import sequence_to_tensor, clone_sequence
-from data_mirroring import mirror_tDic_sequence
-from data_normalization import tensor_transform_to_goal_fr
+from usefulCode.baseline.data_conversions import sequence_to_tensor, clone_sequence
+from usefulCode.baseline.data_mirroring import mirror_tDic_sequence
+from usefulCode.baseline.data_normalization import tensor_transform_to_goal_fr
 
 class Dataset(Dataset):
     def __init__(self, data_file, contextQ_file, path = '../dataset', limit= -1,  frame_threshold = 0.1, label_exists = True, 

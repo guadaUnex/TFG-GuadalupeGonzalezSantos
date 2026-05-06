@@ -8,18 +8,27 @@ from torch_geometric.data import Dataset, HeteroData
 from transforms import GoalFrameTransform
 
 class SocNavHeteroDataset(Dataset):
-    def __init__(self, data_list_file, path='../../../dataset/labeled', transform=None, pre_transform=None, pre_filter=None):
+    def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv',
+                   transform=None, pre_transform=None, pre_filter=None):
         
         self.data_list_file = data_list_file
 
-        with open(os.path.join(path, 'split', data_list_file), 'r') as f:
+        with open(os.path.join(data_path, 'split', data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
 
-        self.context_df = pd.read_csv('../../../dataset/contexts/anthropic_claude_context.csv', index_col='context')
+        self.context_df = pd.read_csv(context_path, index_col='context')
 
         self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
+        self.dataset = []
+
+        self.timestamp_threshold = 0.3
             
-        super(SocNavHeteroDataset, self).__init__(path, transform, pre_transform, pre_filter)
+        super(SocNavHeteroDataset, self).__init__(data_path, transform, pre_transform, pre_filter)
+
+        dataset_path = os.path.join(self.processed_dir, 'dataset.pt')
+        if os.path.exists(dataset_path) and len(self.dataset) == 0:
+            self.dataset = torch.load(dataset_path,weights_only=False)
+
 
     @property
     def raw_file_names(self):
@@ -27,7 +36,7 @@ class SocNavHeteroDataset(Dataset):
 
     @property
     def processed_file_names(self):
-        return [f"data_{name.replace('/', '_')}.pt" for name in self.file_names]
+        return ['dataset.pt']
     
     @property
     def raw_dir(self):
@@ -35,19 +44,15 @@ class SocNavHeteroDataset(Dataset):
     
     @property
     def processed_dir(self):
-        return os.path.join(self.root, 'processed')
+        return os.path.join(self.root)
 
     def process(self):
 
         # Limites de pruebas
         limit = 25
         count = 0
-
-        paths_to_process = list(zip(self.raw_paths, self.processed_paths))[:limit]
-
-        for raw_path, processed_path in tqdm(zip(self.raw_paths, self.processed_paths), 
-                                             total=len(self.raw_paths), 
-                                             desc="Procesando JSONs"):            
+        
+        for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
             with open(raw_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
 
@@ -57,25 +62,29 @@ class SocNavHeteroDataset(Dataset):
             self.transformer.normalize_context(context)
 
             trayectoria = []
+            prev_timestamp = json_data['sequence'][0]['timestamp']
 
             for frame_data in json_data['sequence']:
-                grafo_frame = self._json_to_heterodata(frame_data, walls, context)
-                trayectoria.append(grafo_frame)
+                if (frame_data['timestamp'] - prev_timestamp) < self.timestamp_threshold:
+                    grafo_frame = self._json_to_heterodata(frame_data, walls, context)
+                    trayectoria.append(grafo_frame)
+                    prev_timestamp = frame_data['timestamp']
 
-            torch.save(trayectoria, processed_path)
+            self.dataset.append(trayectoria)
 
             count += 1
 
             if count == limit:
                 break
 
+        torch.save(self.dataset, os.path.join(self.processed_dir, 'dataset.pt'))
+
 
     def len(self):
-        return len(self.processed_file_names)
+        return len(self.dataset)
 
     def get(self, idx):
-        data = torch.load(self.processed_paths[idx])
-        return data
+        return self.dataset[idx]
 
     # --- MÉTODOS AUXILIARES ---
 
@@ -124,7 +133,6 @@ class SocNavHeteroDataset(Dataset):
 
         # Scenario node
         scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
-        print(scenario_features)
         data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float64)
        
         data = self._create_edges(data, full_conexo=full_conexo)
@@ -215,9 +223,8 @@ class SocNavHeteroDataset(Dataset):
 
 
 if __name__ == "__main__":
-    # Configuración de rutas
     ruta_raiz = 'C:/Users/Usuario/Desktop/Universidad/TFG/dataset/labeled'
-    dataset = SocNavHeteroDataset(path=ruta_raiz, data_list_file='train_set_socnav3.txt')
+    dataset = SocNavHeteroDataset(data_path=ruta_raiz, data_list_file='train_set_socnav3.txt')
 
     print(f"\n🚀 Iniciando auditoría del Dataset. Total trayectorias: {len(dataset)}")
 
@@ -227,7 +234,7 @@ if __name__ == "__main__":
         print(f"✅ Trayectoria 0 cargada correctamente ({len(trayectoria)} frames).")
     except Exception as e:
         print(f"❌ Error al cargar el primer elemento: {e}")
-        print("💡 Consejo: Borra la carpeta 'processed' para forzar un nuevo procesado.")
+        print("💡 Consejo: Borra el archivo 'dataset.pt' para forzar un nuevo procesado.")
         exit()
 
     if isinstance(trayectoria, list) and len(trayectoria) > 0:
@@ -250,14 +257,14 @@ if __name__ == "__main__":
         s_x = f0['scenario'].x
         print(f"🏢 Escenario: {s_x.shape}")
         if s_x.numel() > 0:
-            # Mostramos el contexto (la primera fila del tensor)
-            print(f"   - 📝 Contexto: {s_x[2:].tolist()}")
+            s_flat = s_x[0]
+            # Mostramos el contexto (los datos restantes)
+            print(f"   - 📝 Contexto: {s_flat[2:].tolist()}")
             # Mostramos las dimensiones normalizadas
-            print(f"   - 📐 Size Robot Norm: {s_x[:2].tolist()}")
+            print(f"   - 📐 Size Robot Norm: {s_flat[:2].tolist()}")
 
         print("\n--- 🔗 TEST DE ARISTAS (RELACIONES) ---")
         
-        # Test: Enlace Crítico Robot -> Goal
         rel_target = ('robot', 'targets', 'goal')
         if rel_target in f0.edge_types:
             e_idx = f0[rel_target].edge_index
@@ -266,14 +273,12 @@ if __name__ == "__main__":
         else:
             print("❌ Error: No se encontró el enlace 'targets' entre Robot y Goal.")
 
-        # Test: Enlaces de Proximidad (Humanos/Paredes)
         for rel in f0.edge_types:
             if 'near_to' in rel[1]:
                 num_edges = f0[rel].edge_index.shape[1]
                 print(f"📡 Relación {rel}: {num_edges} enlaces detectados.")
 
         print("\n--- 📏 TEST DE RANGOS (NORMALIZACIÓN) ---")
-        # Comprobar que los valores no explotan (deberían estar cerca de [-1, 1])
         all_node_features = torch.cat([f0[nt].x.flatten() for nt in f0.node_types if f0[nt].x.numel() > 0])
         max_val = all_node_features.max().item()
         min_val = all_node_features.min().item()
