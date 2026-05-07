@@ -93,13 +93,19 @@ class SocNavHeteroDataset(Dataset):
         s = self.transformer.scale  
         v = self.transformer.v_max
 
+        # We read de robot data first to save some information in the scenario node
+        r = frame['robot']
+
+        # Scenario node
+        scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
+        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float64)
+
         # Goal node
         g = frame['goal']
         gx, gy, ga = torch.tensor(g['x']), torch.tensor(g['y']), torch.tensor(g['angle'])
         data['goal'].x = torch.tensor([[0.0, 0.0, 0, g['pos_threshold']/s, g['angle_threshold']/3.14]], dtype=torch.float)
 
         # Robot node
-        r = frame['robot']
         nx, ny, na = self.transformer.transform_pose(r['x'], r['y'], r['angle'], gx, gy, ga)
         nvx, nvy, nva = self.transformer.transform_velocity(r['speed_x'], r['speed_y'], r['speed_a'], ga)
         data['robot'].x = torch.tensor([[nx, ny, na, nvx, nvy, nva]], dtype=torch.float)
@@ -130,10 +136,6 @@ class SocNavHeteroDataset(Dataset):
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
         else:
             data['wall'].x = torch.empty((0, 2))
-
-        # Scenario node
-        scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
-        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float64)
        
         data = self._create_edges(data, full_conexo=full_conexo)
 

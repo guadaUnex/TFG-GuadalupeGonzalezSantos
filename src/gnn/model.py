@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GATConv, Sequential, to_hetero
-from torch.nn.functional import relu, leaky_relu
 
 class HybridModel(nn.Module):
-    def __init__(self, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels,  num_layers, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
+    def __init__(self, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, num_layers, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
+                 linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
         super(HybridModel,self).__init__()
 
         self.gnn_output = gnn_output
@@ -22,7 +22,7 @@ class HybridModel(nn.Module):
         layers = []
 
         layers.append((GATConv(gnn_input, gnn_hidden_channels, gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
-        layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.LeakyReLU(inplace=True))
 
         for idx in range(len(gnn_hidden_channels) - 1):
             input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
@@ -36,7 +36,7 @@ class HybridModel(nn.Module):
         layers.append((GATConv(input_dim, self.gnn_output, heads=1, concat=False), 
                        'x, edge_index -> x'))
 
-        self.gnn_block = nn.Sequential('x, edge_index', layers)
+        self.gnn_block = Sequential('x, edge_index', layers)
 
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
@@ -56,7 +56,7 @@ class HybridModel(nn.Module):
         self.fc_layers.append(nn.Linear(linear_size,1))
         self.fc = self.fc_layers[-1]
         if len(linear_layers)>0:
-            self.mlp = nn.Sequential(*self.fc_layers)
+            self.mlp = Sequential(*self.fc_layers)
 
         if rnn_activation == 'sigmoid':
             self.correct_output = False
@@ -70,5 +70,31 @@ class HybridModel(nn.Module):
         self.context_vars = self.context_vars
 
 
-    def forward(self):
-        x=1
+    def forward(self, batch_data, slengths):
+        gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
+
+        scenarios = gnn_output['scenario']
+
+        num_trajectories = len(slengths)
+        max_sequence_length = scenarios.shape[0] // num_trajectories
+
+        x_seq = scenarios.view(num_trajectories, max_sequence_length, -1)
+
+        rnn_output, _ = self.rnn_layer(x_seq)
+
+        out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
+
+        if self.context_vars > 0:
+            out = torch.concat((out, x_seq[:, 0, -self.context_vars:]), axis=1)
+
+        for layer in self.fc_layers:
+            out = layer(out)
+
+        if self.activation is not None:
+            out = self.activation(out)
+            
+        if hasattr(self, 'correct_output') and self.correct_output:
+            out = (out + 1.) / 2.
+        
+        return out
+
