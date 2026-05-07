@@ -1,85 +1,74 @@
-class GATNetwork(nn.Module):
-    def init(self, in_channels, out_channels, network_config, star_topology, concat=False):
-        """Initalize object
-        
-        Args:
-            in_channels (int): Size of each input sample
-                Note: Number of node features.
-            
-            out_channels (int): Size of each output sample
-                Note: Should be 3 + num_joints for the intended use case.
-            
-            network_config (dict): Dictionary containing the netwoek creation attributes 
-                Note: Loaded from the .yaml file or the .pth checkpoint.
-        """
-        
-        super().init()
-        
-        self.in_channels     = in_channels
-        self.out_channels    = out_channels
-        self.star_topology   = star_topology
-        # self.model_pth       = network_config['model_pth']
-        if not 'model_type' in network_config:
-            self.model_type  = "GATNetwork"
-        else:
-            self.model_type  = network_config['model_type']
+import torch
+import torch.nn as nn
+from torch_geometric.nn import GATConv, Sequential, to_hetero
+from torch.nn.functional import relu, leaky_relu
 
-        self.hidden_channels = network_config['hidden_channels']
-        self.heads           = network_config['heads']
-        self.concat          = False #network_config['concat']
+class HybridModel(nn.Module):
+    def __init__(self, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels,  num_layers, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
+        super(HybridModel,self).__init__()
 
-        self.num_hidden_layers = len(self.hidden_channels)
-        self.num_layers = self.num_hidden_layers + 1
-        
-        self.layers = self.make_layers()
-        self.model = Sequential('x, edge_index', self.layers)
-        
-    def make_layers(self):
+        self.gnn_output = gnn_output
+        self.num_edges = num_edges
+        self.num_layers = num_layers
+        self.context_vars = context_vars
+
+        self.defineGnnBlock(gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat)
+
+        self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
+
+        self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
+
+    def defineGnnBlock(self, gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
-        
-        # Input layer
-        layers.append((GATConv(self.in_channels, self.hidden_channels[0], self.heads[0], self.concat), 
-                       'x, edge_index -> x'))
-        layers.append(ReLU(inplace=True))
-            
-        # Hidden layers
-        for idx in range(len(self.hidden_channels) - 1):
-            # If previous layer concatenated, actual output size is hidden * heads
-            input_dim = self.hidden_channels[idx] * (self.heads[idx] if self.concat else 1)
-            output_dim = self.hidden_channels[idx + 1]
-            heads = self.heads[idx + 1]
-            layers.append((GATConv(input_dim, output_dim, heads, self.concat),
-                           'x, edge_index -> x'))
-            layers.append(LeakyReLU(negative_slope=0.1))
-            
-        # Output layer — always 1 head, no concat, to get clean [N, out_channels] output
-        # Input dim comes from the last hidden layer (heads[-1] is the last hidden layer's heads)
-        input_dim = self.hidden_channels[-1] * (self.heads[-1] if self.concat else 1)
-        layers.append((GATConv(input_dim, self.out_channels, heads=1, concat=False), 
-                       'x, edge_index -> x'))
-        
-        return layers
-        
-    def forward(self, batch_data):
-        """
-        Args:
-            batch_data: A PyG Batch object with fields:
-                - batch_data.x:          [total_nodes, in_channels]
-                - batch_data.edge_index: [2, total_edges]
-                - batch_data.ptr:        [batch_size + 1] — start index of each graph
 
-        Returns:
-            Tensor of shape [batch_size, out_channels]
-        """
-        # Run message passing over ALL nodes (neighborhood aggregation)
-        out = self.model(batch_data.x, batch_data.edge_index)  # [total_nodes, out_channels]
-        
-        if self.star_topology:
-            # Select only the root node (node 0) of each graph in the batch
-            root_idx = batch_data.ptr[:-1] # [batch_size]
-        
-            return out[root_idx]*100  # [batch_size, out_channels]
+        layers.append((GATConv(gnn_input, gnn_hidden_channels, gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
+        layers.append(nn.ReLU(inplace=True))
+
+        for idx in range(len(gnn_hidden_channels) - 1):
+            input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
+            output_dim = gnn_hidden_channels[idx + 1]
+            heads = gnn_heads[idx + 1]
+            layers.append((GATConv(input_dim, output_dim, heads, gnn_concat),
+                           'x, edge_index -> x'))
+            layers.append(nn.LeakyReLU(negative_slope=0.1))
+
+        input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
+        layers.append((GATConv(input_dim, self.gnn_output, heads=1, concat=False), 
+                       'x, edge_index -> x'))
+
+        self.gnn_block = nn.Sequential('x, edge_index', layers)
+
+
+    def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
+        if rnn_type == "GRU":
+            self.rnn_layer = nn.GRU(self.gnn_output, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+        elif rnn_type == "LSTM":
+            self.rnn_layer = nn.LSTM(self.gnn_output, rnn_hidden_channels, self.num_layers,
+                                batch_first=True, dropout = rnn_dropout)
+            
+        self.fc_layers = []
+        linear_size = rnn_hidden_channels+self.context_vars
+        for l in linear_layers:
+            self.fc_layers.append(nn.Linear(linear_size, l))
+            linear_size = l
+            self.fc_layers.append(nn.LeakyReLU())
+
+        self.fc_layers.append(nn.Linear(linear_size,1))
+        self.fc = self.fc_layers[-1]
+        if len(linear_layers)>0:
+            self.mlp = nn.Sequential(*self.fc_layers)
+
+        if rnn_activation == 'sigmoid':
+            self.correct_output = False
+            self.activation = nn.Sigmoid()
+        elif rnn_activation == 'tanh':
+            self.correct_output = True
+            self.activation = nn.Tanh()
         else:
-            # Calculate the average out value
-            out_pooled = global_mean_pool(out, batch_data.batch) # [batch_size, out_channels]
-            return out_pooled*100
+            self.correct_output = False
+            self.activation = None
+        self.context_vars = self.context_vars
+
+
+    def forward(self):
+        x=1
