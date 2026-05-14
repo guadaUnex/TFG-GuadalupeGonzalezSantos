@@ -97,4 +97,3 @@ class HybridModel(nn.Module):
             out = (out + 1.) / 2.
         
         return out
-

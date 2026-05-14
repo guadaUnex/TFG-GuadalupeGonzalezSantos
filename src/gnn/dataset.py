@@ -98,7 +98,7 @@ class SocNavHeteroDataset(Dataset):
 
         # Scenario node
         scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
-        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float64)
+        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
 
         # Goal node
         g = frame['goal']
@@ -182,6 +182,19 @@ class SocNavHeteroDataset(Dataset):
 
             data['robot', 'targets', 'goal'].edge_index = edge_index_rg
             data['robot', 'targets', 'goal'].edge_attr = edge_attr_rg
+
+        if 'scenario' in node_types:
+            for t in node_types:
+                if t == 'scenario':
+                    continue
+                
+                num_nodes_of_type = data[t].x.size(0)
+                if num_nodes_of_type > 0:
+                    row = torch.arange(num_nodes_of_type, dtype=torch.long)
+                    col = torch.zeros(num_nodes_of_type, dtype=torch.long)
+                    edge_index_in_scenario = torch.stack([row, col], dim=0)
+                    
+                    data[t, 'in', 'scenario'].edge_index = edge_index_in_scenario
 
         spatial_nodes = [t for t in node_types if t not in ['goal', 'scenario']]
     
@@ -276,9 +289,14 @@ if __name__ == "__main__":
             print("❌ Error: No se encontró el enlace 'targets' entre Robot y Goal.")
 
         for rel in f0.edge_types:
+            num_edges = f0[rel].edge_index.shape[1]
+            
             if 'near_to' in rel[1]:
-                num_edges = f0[rel].edge_index.shape[1]
-                print(f"📡 Relación {rel}: {num_edges} enlaces detectados.")
+                print(f"📡 Relación Espacial {rel}: {num_edges} enlaces.")
+            elif 'in' in rel[1]:
+                print(f"🏢 Relación Contextual {rel}: {num_edges} nodos conectados al escenario.")
+            elif 'targets' in rel[1]:
+                continue
 
         print("\n--- 📏 TEST DE RANGOS (NORMALIZACIÓN) ---")
         all_node_features = torch.cat([f0[nt].x.flatten() for nt in f0.node_types if f0[nt].x.numel() > 0])
