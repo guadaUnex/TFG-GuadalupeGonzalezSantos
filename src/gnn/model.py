@@ -21,7 +21,7 @@ class HybridModel(nn.Module):
     def defineGnnBlock(self, gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
 
-        layers.append((GATConv(gnn_input, gnn_hidden_channels, gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
+        layers.append((GATConv(gnn_input, gnn_hidden_channels[0], gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
         layers.append(nn.LeakyReLU(inplace=True))
 
         for idx in range(len(gnn_hidden_channels) - 1):

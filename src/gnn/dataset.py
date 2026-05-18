@@ -8,13 +8,32 @@ from torch_geometric.data import Dataset, HeteroData
 from transforms import GoalFrameTransform
 
 class SocNavHeteroDataset(Dataset):
+    """Heterogeneous Dataset for Social Navigation. 
+
+    It loads social navigation scenarios trajectories from JSON files and transforms
+    the data into temporary sequences of heterogeneous graphs (`HeteroData`).
+
+    Attributes:
+    data_list_file (str): Name of the file that contains the names of the trajectories files.
+    file_names (list): List of JSON-to-process names.
+    context_df (pd.DataFrame): DataFrame with context feature vectors. 
+    transformer (GoalFrameTransform): Module for spatial transformations and normalization.
+    dataset (list): Memory struture for storing the proccessed trajectories.
+    timestamp_threshold (float): Maximum allowed time interval between consecutive frames.
+        """
+    
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv',
                    transform=None, pre_transform=None, pre_filter=None):
+        """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
         
         self.data_list_file = data_list_file
 
+        # Reading the dataset file
+
         with open(os.path.join(data_path, 'split', data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
+
+        # Reading the context file
 
         self.context_df = pd.read_csv(context_path, index_col='context')
 
@@ -25,9 +44,12 @@ class SocNavHeteroDataset(Dataset):
             
         super(SocNavHeteroDataset, self).__init__(data_path, transform, pre_transform, pre_filter)
 
+        # Checking if the dataset is already charged, if not, it calls the process method. Otherwise, it loads the pt file
+
         dataset_path = os.path.join(self.processed_dir, 'dataset.pt')
         if os.path.exists(dataset_path) and len(self.dataset) == 0:
             self.dataset = torch.load(dataset_path,weights_only=False)
+
 
 
     @property
@@ -237,76 +259,76 @@ class SocNavHeteroDataset(Dataset):
 
 
 
-if __name__ == "__main__":
-    ruta_raiz = 'C:/Users/Usuario/Desktop/Universidad/TFG/dataset/labeled'
-    dataset = SocNavHeteroDataset(data_path=ruta_raiz, data_list_file='train_set_socnav3.txt')
+# if __name__ == "__main__":
+#     ruta_raiz = 'C:/Users/Usuario/Desktop/Universidad/TFG/dataset/labeled'
+#     dataset = SocNavHeteroDataset(data_path=ruta_raiz, data_list_file='train_set_socnav3.txt')
 
-    print(f"\n🚀 Iniciando auditoría del Dataset. Total trayectorias: {len(dataset)}")
+#     print(f"\n🚀 Iniciando auditoría del Dataset. Total trayectorias: {len(dataset)}")
 
-    # 1. Intentamos cargar la primera trayectoria procesada
-    try:
-        trayectoria = dataset[0]
-        print(f"✅ Trayectoria 0 cargada correctamente ({len(trayectoria)} frames).")
-    except Exception as e:
-        print(f"❌ Error al cargar el primer elemento: {e}")
-        print("💡 Consejo: Borra el archivo 'dataset.pt' para forzar un nuevo procesado.")
-        exit()
+#     # 1. Intentamos cargar la primera trayectoria procesada
+#     try:
+#         trayectoria = dataset[0]
+#         print(f"✅ Trayectoria 0 cargada correctamente ({len(trayectoria)} frames).")
+#     except Exception as e:
+#         print(f"❌ Error al cargar el primer elemento: {e}")
+#         print("💡 Consejo: Borra el archivo 'dataset.pt' para forzar un nuevo procesado.")
+#         exit()
 
-    if isinstance(trayectoria, list) and len(trayectoria) > 0:
-        f0 = trayectoria[0]
+#     if isinstance(trayectoria, list) and len(trayectoria) > 0:
+#         f0 = trayectoria[0]
         
-        print("\n--- 📝 TEST DE ESTRUCTURA (FRAME 0) ---")
+#         print("\n--- 📝 TEST DE ESTRUCTURA (FRAME 0) ---")
         
-        # Test: Nodo Goal (Meta)
-        if 'goal' in f0.node_types:
-            g_x = f0['goal'].x
-            print(f"🎯 Meta: {g_x.shape} | Threshold pos: {g_x[0, 3]:.4f} | Threshold ang: {g_x[0, 4]:.4f}")
-            if g_x[0, 0] != 0 or g_x[0, 1] != 0:
-                print("⚠️  Aviso: La meta no está en (0,0). Revisa transform_pose.")
+#         # Test: Nodo Goal (Meta)
+#         if 'goal' in f0.node_types:
+#             g_x = f0['goal'].x
+#             print(f"🎯 Meta: {g_x.shape} | Threshold pos: {g_x[0, 3]:.4f} | Threshold ang: {g_x[0, 4]:.4f}")
+#             if g_x[0, 0] != 0 or g_x[0, 1] != 0:
+#                 print("⚠️  Aviso: La meta no está en (0,0). Revisa transform_pose.")
 
-        # Test: Nodo Robot
-        r_x = f0['robot'].x
-        print(f"🤖 Robot: {r_x.shape} | Pos: {r_x[0, :2].tolist()} | Vel: {r_x[0, 3:5].tolist()}")
+#         # Test: Nodo Robot
+#         r_x = f0['robot'].x
+#         print(f"🤖 Robot: {r_x.shape} | Pos: {r_x[0, :2].tolist()} | Vel: {r_x[0, 3:5].tolist()}")
 
-        # Test: Nodo Scenario (Dimensiones normalizadas y contexto)
-        s_x = f0['scenario'].x
-        print(f"🏢 Escenario: {s_x.shape}")
-        if s_x.numel() > 0:
-            s_flat = s_x[0]
-            # Mostramos el contexto (los datos restantes)
-            print(f"   - 📝 Contexto: {s_flat[2:].tolist()}")
-            # Mostramos las dimensiones normalizadas
-            print(f"   - 📐 Size Robot Norm: {s_flat[:2].tolist()}")
+#         # Test: Nodo Scenario (Dimensiones normalizadas y contexto)
+#         s_x = f0['scenario'].x
+#         print(f"🏢 Escenario: {s_x.shape}")
+#         if s_x.numel() > 0:
+#             s_flat = s_x[0]
+#             # Mostramos el contexto (los datos restantes)
+#             print(f"   - 📝 Contexto: {s_flat[2:].tolist()}")
+#             # Mostramos las dimensiones normalizadas
+#             print(f"   - 📐 Size Robot Norm: {s_flat[:2].tolist()}")
 
-        print("\n--- 🔗 TEST DE ARISTAS (RELACIONES) ---")
+#         print("\n--- 🔗 TEST DE ARISTAS (RELACIONES) ---")
         
-        rel_target = ('robot', 'targets', 'goal')
-        if rel_target in f0.edge_types:
-            e_idx = f0[rel_target].edge_index
-            e_attr = f0[rel_target].edge_attr
-            print(f"🔗 Robot-Goal: {e_idx.shape} | Atributos [Dist, Thres]: {e_attr[0].tolist()}")
-        else:
-            print("❌ Error: No se encontró el enlace 'targets' entre Robot y Goal.")
+#         rel_target = ('robot', 'targets', 'goal')
+#         if rel_target in f0.edge_types:
+#             e_idx = f0[rel_target].edge_index
+#             e_attr = f0[rel_target].edge_attr
+#             print(f"🔗 Robot-Goal: {e_idx.shape} | Atributos [Dist, Thres]: {e_attr[0].tolist()}")
+#         else:
+#             print("❌ Error: No se encontró el enlace 'targets' entre Robot y Goal.")
 
-        for rel in f0.edge_types:
-            num_edges = f0[rel].edge_index.shape[1]
+#         for rel in f0.edge_types:
+#             num_edges = f0[rel].edge_index.shape[1]
             
-            if 'near_to' in rel[1]:
-                print(f"📡 Relación Espacial {rel}: {num_edges} enlaces.")
-            elif 'in' in rel[1]:
-                print(f"🏢 Relación Contextual {rel}: {num_edges} nodos conectados al escenario.")
-            elif 'targets' in rel[1]:
-                continue
+#             if 'near_to' in rel[1]:
+#                 print(f"📡 Relación Espacial {rel}: {num_edges} enlaces.")
+#             elif 'in' in rel[1]:
+#                 print(f"🏢 Relación Contextual {rel}: {num_edges} nodos conectados al escenario.")
+#             elif 'targets' in rel[1]:
+#                 continue
 
-        print("\n--- 📏 TEST DE RANGOS (NORMALIZACIÓN) ---")
-        all_node_features = torch.cat([f0[nt].x.flatten() for nt in f0.node_types if f0[nt].x.numel() > 0])
-        max_val = all_node_features.max().item()
-        min_val = all_node_features.min().item()
-        print(f"📊 Rango de valores en el grafo: [{min_val:.2f}, {max_val:.2f}]")
+#         print("\n--- 📏 TEST DE RANGOS (NORMALIZACIÓN) ---")
+#         all_node_features = torch.cat([f0[nt].x.flatten() for nt in f0.node_types if f0[nt].x.numel() > 0])
+#         max_val = all_node_features.max().item()
+#         min_val = all_node_features.min().item()
+#         print(f"📊 Rango de valores en el grafo: [{min_val:.2f}, {max_val:.2f}]")
         
-        if max_val > 5.0:
-            print("⚠️  Alerta: Tienes valores muy altos. Revisa las divisiones por 's' o 'v'.")
+#         if max_val > 5.0:
+#             print("⚠️  Alerta: Tienes valores muy altos. Revisa las divisiones por 's' o 'v'.")
 
-    else:
-        print("❌ Error: El dataset devolvió una lista vacía o un objeto no válido.")
+#     else:
+#         print("❌ Error: El dataset devolvió una lista vacía o un objeto no válido.")
         
