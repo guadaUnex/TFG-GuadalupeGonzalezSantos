@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch_geometric.nn import GATConv, Sequential, to_hetero
 
 class HybridModel(nn.Module):
-    def __init__(self, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, num_layers, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
+    def __init__(self, num_layers, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
                  linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
         super(HybridModel,self).__init__()
 
@@ -46,7 +46,7 @@ class HybridModel(nn.Module):
             self.rnn_layer = nn.LSTM(self.gnn_output, rnn_hidden_channels, self.num_layers,
                                 batch_first=True, dropout = rnn_dropout)
             
-        self.fc_layers = []
+        self.fc_layers = nn.ModuleList()
         linear_size = rnn_hidden_channels+self.context_vars
         for l in linear_layers:
             self.fc_layers.append(nn.Linear(linear_size, l))
@@ -72,13 +72,18 @@ class HybridModel(nn.Module):
 
     def forward(self, batch_data, slengths):
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
-
         scenarios = gnn_output['scenario']
 
         num_trajectories = len(slengths)
-        max_sequence_length = scenarios.shape[0] // num_trajectories
+        max_len = int(torch.max(slengths).item())
+        features_dim = scenarios.size(-1)
 
-        x_seq = scenarios.view(num_trajectories, max_sequence_length, -1)
+        x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
+
+        current_idx = 0
+        for i, length in enumerate(slengths):
+            x_seq[i, :length] = scenarios[current_idx : current_idx + length]
+            current_idx += length
 
         rnn_output, _ = self.rnn_layer(x_seq)
 
