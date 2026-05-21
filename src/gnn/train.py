@@ -29,6 +29,7 @@ CONTEXT_FILE = config_data["CONTEXT_FILE"]
 
 TRAIN_FILE = config_data["TRAIN_FILE"]
 DEV_FILE = config_data["DEV_FILE"]
+TEST_FILE = config_data["TEST_FILE"]
 
 ACTIVATION = config_data["ACTIVATION"]
 ADD_CONTEXT_TO_OUTPUT = config_data['ADD_CONTEXT_TO_OUTPUT']
@@ -49,6 +50,7 @@ TIMESTAMP_THRESHOLD = config_data["TIMESTAMP_THRESHOLD"]
 SAVE_PLOTS_LOCALLY = config_data["SAVE_PLOTS_LOCALLY"]
 UPLOAD_TO_WANDB = config_data["UPLOAD_TO_WANDB"]
 
+qual_loaders = []
 Q_TEST_PATH = config_data["Q_TEST_PATH"]
 config_qtest = yaml.load(open(config_data['Q_TEST_FILE'], "r"), Loader=yaml.Loader)
 Q_FILES = config_qtest["FILES"]
@@ -73,10 +75,6 @@ def train_model(rnn_data, gnn_data, num_layers,
     train_dataset = SocNavHeteroDataset(data_list_file = TRAIN_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate, drop_last=True)
 
-    # all_features = train_dataset.get_all_features()
-    # print("Num Features:", len(all_features))
-    # input_size = len(all_features)
-
     if ADD_CONTEXT_TO_OUTPUT:
         context_features = len(train_dataset.get_context_features())
     else:
@@ -87,7 +85,7 @@ def train_model(rnn_data, gnn_data, num_layers,
     val_dataset = SocNavHeteroDataset(data_list_file = DEV_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate, drop_last=True)
 
-    model = HybridModel(num_layers, gnn_input = gnn_data['input'], gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
+    model = HybridModel(num_layers, gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
                         gnn_hidden_channels= gnn_data['hidden_channels'], rnn_type = rnn_data['type'], num_edges = gnn_data['num_edges'],
                         gnn_heads = gnn_data['heads'], gnn_concat = gnn_data['concant'], gnn_metadata= gnn_data['metadata'], linear_layers = LINEAR_LAYERS, 
                         rnn_activation = ACTIVATION, context_vars = context_features, rnn_dropout = DROPOUT)
@@ -267,26 +265,31 @@ def train_model(rnn_data, gnn_data, num_layers,
     return model, checkpoint_path
 
 
-meta_dataset = SocNavHeteroDataset(data_list_file = TRAIN_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
-sample_graph = meta_dataset[0][0][0]  
+test_dataset = SocNavHeteroDataset(
+    data_list_file=TEST_FILE, 
+    data_path=DATA_PATH, 
+    context_path=CONTEXT_FILE, 
+    timestamp_threshold=TIMESTAMP_THRESHOLD
+)
+test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
 
-# Configuración dinámica del bloque espacial GNN
+sample_graph = test_dataset[0][0][0]  
+
+# Construimos gnn_data dinámicamente
 gnn_data = {
-    'input': meta_dataset.get_all_features(),               
     'output': HIDDEN_SIZE,                                  
     'hidden_channels': HIDDEN_SIZE,                         
     'num_edges': len(sample_graph.edge_index_dict),         
-    'heads': GNN_HEADS,                                     
-    'concant': GNN_CONCAT,                                  
+    'heads': GNN_HEADS,               
+    'concant': GNN_CONCAT,         
     'metadata': sample_graph.metadata()                     
 }
 
-# Configuración dinámica del bloque temporal RNN
+# Construimos rnn_data dinámicamente
 rnn_data = {
     'type': RNN_TYPE,                                       
     'hidden_channels': HIDDEN_SIZE                          
 }
-
 
 def get_qual_loader(file_path):
     # print(f"Processing file: {file_path}")
@@ -296,7 +299,7 @@ def get_qual_loader(file_path):
     # context = {"urgency":98., "importance":98., "risk":95 , "distance_from_human":95., "minimum_speed":20, "average_speed":15., "maximum_speed":15.}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(f"Creating q_test for: {context}")
-        qual_set = SocNavHeteroDataset(data_list_file = TEST_FILE, data_path = Q_TEST_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
+        qual_set = SocNavHeteroDataset(data_list_file = TEST_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
         qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
         q_loaders.append((context, files, qual_loader, abbreviated_context))
     return q_loaders
@@ -307,8 +310,14 @@ for id, path in enumerate(Q_FILES):
     print(f"Processing files with {speed}")
     qual_loaders[speed] = get_qual_loader(os.path.join(Q_TEST_PATH,path))
 
-model, checkpoint = train_model(hidden_size=HIDDEN_SIZE, num_epochs=MAX_EPOCHS, num_layers=NUM_LAYERS,learning_rate=LR, patience= MAX_PATIENCE, batch_size= BATCH_SIZE)
+model, checkpoint = train_model(
+    rnn_data=rnn_data, 
+    gnn_data=gnn_data, 
+    num_layers=NUM_LAYERS,
+    batch_size=BATCH_SIZE, 
+    num_epochs=MAX_EPOCHS, 
+    patience=MAX_PATIENCE, 
+    learning_rate=LR
+)
 if UPLOAD_TO_WANDB is True:
     wandb.finish()
-
-

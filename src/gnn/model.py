@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch_geometric.nn import GATConv, Sequential, to_hetero
 
 class HybridModel(nn.Module):
-    def __init__(self, num_layers, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
+    def __init__(self, num_layers, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
                  linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
         super(HybridModel,self).__init__()
 
@@ -12,7 +12,7 @@ class HybridModel(nn.Module):
         self.num_layers = num_layers
         self.context_vars = context_vars
 
-        self.defineGnnBlock(gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat)
+        self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
 
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
 
@@ -21,7 +21,7 @@ class HybridModel(nn.Module):
     def defineGnnBlock(self, gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
 
-        layers.append((GATConv(gnn_input, gnn_hidden_channels[0], gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
+        layers.append((GATConv(-1, gnn_hidden_channels[0], gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
         layers.append(nn.LeakyReLU(inplace=True))
 
         for idx in range(len(gnn_hidden_channels) - 1):

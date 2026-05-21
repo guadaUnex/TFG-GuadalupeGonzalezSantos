@@ -25,3 +25,5 @@ TIMESTAMP_THRESHOLD: 0.1
 SAVE_PLOTS_LOCALLY: True #Set to False if you dont want to save the qualitative test results and expected vs predicted plots
 UPLOAD_TO_WANDB: False
 
+Q_TEST_PATH: '../../../etc/qualitative_tests'
+Q_TEST_FILE: '../../../etc/qualitative_tests/socnavgym_conf_qualitative_one_static.yaml' 

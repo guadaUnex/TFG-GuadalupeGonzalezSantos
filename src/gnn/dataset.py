@@ -39,6 +39,15 @@ class SocNavHeteroDataset(Dataset):
         self.context_df = pd.read_csv(context_path, index_col='context')
         self.context_features = ['urgency', 'importance', 'risk', 'distance_from_human', 'distance_from_object', 'speed', 'comfort', 
                                  'bumping_human', 'bumping_object', 'predictability']
+        
+        self.all_features = {
+            'scenario': 2 + len(self.context_features), 
+            'goal': 5,
+            'robot': 6,
+            'human': 3,
+            'object': 5,
+            'wall': 2
+        }
 
         self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
         self.dataset = []
@@ -291,5 +300,5 @@ def collate(batch):
     labels_tensor = torch.stack(labels)  
     slengths_tensor = torch.stack(sequence_lengths)
 
-    return batched_graphs, labels, sequence_lengths
+    return batched_graphs, labels_tensor, slengths_tensor
         
