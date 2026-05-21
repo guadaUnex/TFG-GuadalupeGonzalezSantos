@@ -18,7 +18,7 @@ class HybridModel(nn.Module):
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
 
-    def defineGnnBlock(self, gnn_input, gnn_hidden_channels, gnn_heads, gnn_concat):
+    def defineGnnBlock(self, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
 
         layers.append((GATConv(-1, gnn_hidden_channels[0], gnn_heads[0], gnn_concat), 'x, edge_index -> x'))

@@ -13,12 +13,12 @@ from torch.utils.data import DataLoader
 
 from dataset import SocNavHeteroDataset, collate
 from model import HybridModel
-from utils import plot_predictions_vs_expected, plot_qualitative_multiple
+from utils import plot_qualitative_multiple
 
 CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_YAML = os.path.join(CURRENT_PATH, "train.yaml")
 
-parser = argparse.ArgumentParser(description=help)
+parser = argparse.ArgumentParser(description="Pipeline de entrenamiento para SocNavHybridModel")
 parser.add_argument('--task', type=str, default=DEFAULT_YAML, help="yaml file path")
 args = parser.parse_args()
 
@@ -37,7 +37,8 @@ BATCH_SIZE = config_data["BATCH_SIZE"]
 DROPOUT = config_data["DROPOUT"]
 GNN_CONCAT = config_data["GNN_CONCAT"]
 GNN_HEADS = config_data["GNN_HEADS"]
-HIDDEN_SIZE = config_data["HIDDEN_SIZE"]
+GNN_HIDDEN_SIZE = config_data["GNN_HIDDEN_SIZE"]
+RNN_HIDDEN_SIZE = config_data["RNN_HIDDEN_SIZE"]
 LINEAR_LAYERS = config_data["LINEAR_LAYERS"]
 LOSS = config_data["LOSS"]
 LR = config_data["LR"]
@@ -50,7 +51,7 @@ TIMESTAMP_THRESHOLD = config_data["TIMESTAMP_THRESHOLD"]
 SAVE_PLOTS_LOCALLY = config_data["SAVE_PLOTS_LOCALLY"]
 UPLOAD_TO_WANDB = config_data["UPLOAD_TO_WANDB"]
 
-qual_loaders = []
+qual_loaders = {}
 Q_TEST_PATH = config_data["Q_TEST_PATH"]
 config_qtest = yaml.load(open(config_data['Q_TEST_FILE'], "r"), Loader=yaml.Loader)
 Q_FILES = config_qtest["FILES"]
@@ -62,7 +63,7 @@ ABBREVIATED_CONTEXTS = config_qtest["ABBREVIATED_CONTEXTS"]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device:", device)
 
-SAVE_NAME = '_'.join(['ALL_rm_rf_try', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR), str(HIDDEN_SIZE)])
+SAVE_NAME = '_'.join(['ALL_rm_rf_try', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR)])
 
 def train_model(rnn_data, gnn_data, num_layers, 
                 batch_size=32, num_epochs=1000, patience =50, learning_rate=0.00005, 
@@ -87,7 +88,7 @@ def train_model(rnn_data, gnn_data, num_layers,
 
     model = HybridModel(num_layers, gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
                         gnn_hidden_channels= gnn_data['hidden_channels'], rnn_type = rnn_data['type'], num_edges = gnn_data['num_edges'],
-                        gnn_heads = gnn_data['heads'], gnn_concat = gnn_data['concant'], gnn_metadata= gnn_data['metadata'], linear_layers = LINEAR_LAYERS, 
+                        gnn_heads = gnn_data['heads'], gnn_concat = gnn_data['concat'], gnn_metadata= gnn_data['metadata'], linear_layers = LINEAR_LAYERS, 
                         rnn_activation = ACTIVATION, context_vars = context_features, rnn_dropout = DROPOUT)
     model = model.to(device)
     if LOSS == "mse":
@@ -209,7 +210,7 @@ def train_model(rnn_data, gnn_data, num_layers,
                 'rnn_type': RNN_TYPE,
                 'gnn_input_size': gnn_data['input'],
                 'rnn_input_size': rnn_data['input'],
-                'hidden_size': HIDDEN_SIZE,
+                'rnn_hidden_size': RNN_HIDDEN_SIZE,
                 'num_layers': num_layers,
                 'linear_layers': LINEAR_LAYERS,
                 'frame_threshold': TIMESTAMP_THRESHOLD,
@@ -277,18 +278,18 @@ sample_graph = test_dataset[0][0][0]
 
 # Construimos gnn_data dinámicamente
 gnn_data = {
-    'output': HIDDEN_SIZE,                                  
-    'hidden_channels': HIDDEN_SIZE,                         
+    'output': RNN_HIDDEN_SIZE,                                  
+    'hidden_channels': GNN_HIDDEN_SIZE,                         
     'num_edges': len(sample_graph.edge_index_dict),         
     'heads': GNN_HEADS,               
-    'concant': GNN_CONCAT,         
+    'concat': GNN_CONCAT,         
     'metadata': sample_graph.metadata()                     
 }
 
 # Construimos rnn_data dinámicamente
 rnn_data = {
     'type': RNN_TYPE,                                       
-    'hidden_channels': HIDDEN_SIZE                          
+    'hidden_channels': RNN_HIDDEN_SIZE                          
 }
 
 def get_qual_loader(file_path):

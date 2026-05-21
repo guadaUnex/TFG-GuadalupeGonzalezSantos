@@ -1,4 +1,3 @@
-
 DATA_PATH: '../../../dataset/labeled'
 CONTEXT_FILE: '../../../dataset/contexts/anthropic_claude_context.csv'
 
@@ -11,8 +10,9 @@ ADD_CONTEXT_TO_OUTPUT: True
 BATCH_SIZE: 32
 DROPOUT: 0.15
 GNN_CONCAT: True
-GNN_HEADS: 4
-HIDDEN_SIZE: 256
+GNN_HEADS: [4, 4, 4, 4]
+GNN_HIDDEN_SIZE: [256,256,256,256] # It must have the same length as GNN_HEADS
+RNN_HIDDEN_SIZE: 256
 LINEAR_LAYERS: [256]
 LOSS: "mse"
 LR: 0.00001
