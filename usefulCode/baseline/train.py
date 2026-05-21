@@ -347,4 +347,3 @@ for id, path in enumerate(Q_FILES):
 model, checkpoint = train_model(hidden_size=HIDDEN_SIZE, num_epochs=MAX_EPOCHS, num_layers=NUM_LAYERS,learning_rate=LR, patience= MAX_PATIENCE, batch_size= BATCH_SIZE)
 if UPLOAD_TO_WANDB is True:
     wandb.finish()
-

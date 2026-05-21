@@ -42,6 +42,8 @@ class SocNavHeteroDataset(Dataset):
 
         self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
         self.dataset = []
+        self.labels = []
+        self.slengths = []
 
         self.timestamp_threshold = timestamp_threshold
             
@@ -51,8 +53,10 @@ class SocNavHeteroDataset(Dataset):
 
         dataset_path = os.path.join(self.processed_dir, 'dataset.pt')
         if os.path.exists(dataset_path) and len(self.dataset) == 0:
-            self.dataset = torch.load(dataset_path,weights_only=False)
-
+            checkpoint = torch.load(dataset_path, weights_only=False)
+            self.dataset = checkpoint['trajectories']
+            self.labels = checkpoint['labels']
+            self.slengths = checkpoint['slength']
 
 
     @property
@@ -72,7 +76,6 @@ class SocNavHeteroDataset(Dataset):
         return os.path.join(self.root)
 
     def process(self):
-
         # Limites de pruebas
         limit = 25
         count = 0
@@ -83,6 +86,9 @@ class SocNavHeteroDataset(Dataset):
 
             walls = json_data.get('walls', [])
             context_desc = json_data.get('context_description',[])
+            rating = json_data.get('label',[])
+            lenght = 0
+
             context = list(self.context_df.loc[context_desc.rstrip()].to_dict().values())
             self.transformer.normalize_context(context)
 
@@ -94,15 +100,20 @@ class SocNavHeteroDataset(Dataset):
                     grafo_frame = self._json_to_heterodata(frame_data, walls, context)
                     trayectoria.append(grafo_frame)
                     prev_timestamp = frame_data['timestamp']
+                    lenght += 1
 
             self.dataset.append(trayectoria)
+            self.labels.append(rating)
+            self.slengths.append(lenght)
 
             count += 1
 
             if count == limit:
                 break
 
-        torch.save(self.dataset, os.path.join(self.processed_dir, 'dataset.pt'))
+        
+
+        torch.save({'trajectories':self.dataset, 'labels': self.labels, 'slength': self.slengths}, os.path.join(self.processed_dir, 'dataset.pt'))
 
 
     def get_all_features(self):
@@ -115,7 +126,11 @@ class SocNavHeteroDataset(Dataset):
         return len(self.dataset)
 
     def get(self, idx):
-        return self.dataset[idx]
+        data = self.dataset[idx]
+        label = torch.tensor(self.labels[idx], dtype=torch.float32)
+        slength = torch.tensor(self.slengths[idx], dtype=torch.long)
+
+        return data, label, slength
 
     # --- MÉTODOS AUXILIARES ---
 
@@ -268,10 +283,13 @@ class SocNavHeteroDataset(Dataset):
 
 
 def collate(batch):
-    sequences, labels = zip(*batch)  # Separate sequences and labels
-    sequence_lengths = [s.shape[0]-1 for s in sequences]
+    sequences, labels, sequence_lengths = zip(*batch)  
+
     flat_graphs = [frame for traj in sequences for frame in traj]
     batched_graphs = Batch.from_data_list(flat_graphs)    
-    labels = torch.stack(labels)  # Convert labels to tensor
-    return batched_graphs, labels, torch.tensor(sequence_lengths, dtype=torch.long)
+
+    labels_tensor = torch.stack(labels)  
+    slengths_tensor = torch.stack(sequence_lengths)
+
+    return batched_graphs, labels, sequence_lengths
         
