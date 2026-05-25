@@ -241,8 +241,8 @@ class SocNavHeteroDataset(Dataset):
 
         if 'scenario' in node_types:
             for t in node_types:
-                if t == 'scenario':
-                    continue
+                # if t == 'scenario':
+                #     continue
                 
                 num_nodes_of_type = data[t].x.size(0)
                 if num_nodes_of_type > 0:
@@ -252,7 +252,7 @@ class SocNavHeteroDataset(Dataset):
                     
                     data[t, 'in', 'scenario'].edge_index = edge_index_in_scenario
 
-        spatial_nodes = [t for t in node_types if t not in ['goal', 'scenario']]
+        spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
         for i, type_a in enumerate(spatial_nodes):
             for type_b in spatial_nodes[i:]:
@@ -273,8 +273,8 @@ class SocNavHeteroDataset(Dataset):
                 else:
                     mask = dists < dist_threshold
                 
-                if type_a == type_b:
-                    mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
+                # if type_a == type_b:
+                #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
                 
                 edge_index = mask.nonzero(as_tuple=False).t()
                 

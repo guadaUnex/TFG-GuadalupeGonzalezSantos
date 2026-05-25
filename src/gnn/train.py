@@ -278,6 +278,7 @@ sample_graph = test_dataset[0][0][0]
 
 # Construimos gnn_data dinámicamente
 gnn_data = {
+    'input': {k: v.shape[1] for k, v in sample_graph.x_dict.items()},
     'output': RNN_HIDDEN_SIZE,                                  
     'hidden_channels': GNN_HIDDEN_SIZE,                         
     'num_edges': len(sample_graph.edge_index_dict),         
@@ -288,7 +289,8 @@ gnn_data = {
 
 # Construimos rnn_data dinámicamente
 rnn_data = {
-    'type': RNN_TYPE,                                       
+    'type': RNN_TYPE,  
+    'input': RNN_HIDDEN_SIZE, # El input de la rnn es igual al output de la gnn                                     
     'hidden_channels': RNN_HIDDEN_SIZE                          
 }
 
