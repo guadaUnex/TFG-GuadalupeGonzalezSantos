@@ -63,7 +63,7 @@ ABBREVIATED_CONTEXTS = config_qtest["ABBREVIATED_CONTEXTS"]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device:", device)
 
-SAVE_NAME = '_'.join(['ALL_rm_rf_try', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR)])
+SAVE_NAME = '_'.join(['GNN', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR)])
 
 def train_model(rnn_data, gnn_data, num_layers, 
                 batch_size=32, num_epochs=1000, patience =50, learning_rate=0.00005, 

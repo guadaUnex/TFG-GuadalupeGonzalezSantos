@@ -78,7 +78,8 @@ class SocNavHeteroDataset(Dataset):
     
     @property
     def raw_dir(self):
-        return os.path.join(self.root, 'labeled')
+        return self.root
+        # return os.path.join(self.root, 'labeled')
     
     @property
     def processed_dir(self):

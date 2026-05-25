@@ -1,9 +1,9 @@
-DATA_PATH: '../../../dataset/labeled'
-CONTEXT_FILE: '../../../dataset/contexts/anthropic_claude_context.csv'
+DATA_PATH: '/home/dataset2/Development/SocNav3/dataset'
+CONTEXT_FILE: '/home/dataset2/Development/SocNav3/dataset/contexts/anthropic_claude_context.csv'
 
-TRAIN_FILE: 'train_set_socnav3.txt'
-DEV_FILE: 'val_set_socnav3.txt'
-TEST_FILE: 'test_set_socnav3.txt'
+TRAIN_FILE: '/home/dataset2/Development/SocNav3/dataset/train_set.txt'
+DEV_FILE: '/home/dataset2/Development/SocNav3/dataset/val_set.txt'
+TEST_FILE: '/home/dataset2/Development/SocNav3/dataset/test_set.txt'
 
 ACTIVATION: 'sigmoid'
 ADD_CONTEXT_TO_OUTPUT: True
@@ -25,5 +25,5 @@ TIMESTAMP_THRESHOLD: 0.1
 SAVE_PLOTS_LOCALLY: True #Set to False if you dont want to save the qualitative test results and expected vs predicted plots
 UPLOAD_TO_WANDB: False
 
-Q_TEST_PATH: '../../../etc/qualitative_tests'
-Q_TEST_FILE: '../../../etc/qualitative_tests/socnavgym_conf_qualitative_one_static.yaml' 
+Q_TEST_PATH: '/home/dataset2/Development/SocNav3/dataset/qualitative_tests'
+Q_TEST_FILE: '/home/dataset2/Development/SocNav3/dataset/qualitative_tests/socnavgym_conf_qualitative_one_static.yaml' 

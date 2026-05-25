@@ -21,19 +21,19 @@ class HybridModel(nn.Module):
     def defineGnnBlock(self, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
 
-        layers.append((GATConv(-1, gnn_hidden_channels[0], gnn_heads[0], gnn_concat), 'x, edge_index -> x'))
+        layers.append((GATConv(-1, gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
         layers.append(nn.LeakyReLU(inplace=True))
 
         for idx in range(len(gnn_hidden_channels) - 1):
             input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
-            layers.append((GATConv(input_dim, output_dim, heads, gnn_concat),
+            layers.append((GATConv(input_dim, output_dim, heads, gnn_concat, add_self_loops=False),
                            'x, edge_index -> x'))
             layers.append(nn.LeakyReLU(negative_slope=0.1))
 
         input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
-        layers.append((GATConv(input_dim, self.gnn_output, heads=1, concat=False), 
+        layers.append((GATConv(input_dim, self.gnn_output, heads=1, concat=False, add_self_loops=False), 
                        'x, edge_index -> x'))
 
         self.gnn_block = Sequential('x, edge_index', layers)
@@ -54,9 +54,8 @@ class HybridModel(nn.Module):
             self.fc_layers.append(nn.LeakyReLU())
 
         self.fc_layers.append(nn.Linear(linear_size,1))
-        self.fc = self.fc_layers[-1]
         if len(linear_layers)>0:
-            self.mlp = Sequential(*self.fc_layers)
+            self.mlp = nn.Sequential(*self.fc_layers)
 
         if rnn_activation == 'sigmoid':
             self.correct_output = False
