@@ -3,6 +3,7 @@ import json
 import torch
 import pandas as pd
 import numpy as np
+from pathlib import Path
 from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Dataset, HeteroData, Batch
@@ -26,6 +27,8 @@ class SocNavHeteroDataset(Dataset):
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv',
                    transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3):
         """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
+
+        print("Iniciando creación del siguiente dataset: ", data_list_file)
         
         self.data_list_file = data_list_file
 
@@ -55,14 +58,17 @@ class SocNavHeteroDataset(Dataset):
         self.slengths = []
 
         self.timestamp_threshold = timestamp_threshold
+
+        nombre_carpeta = Path(self.data_list_file).stem
+        self.carpeta_guardado = os.path.join(data_path, "loading_files", nombre_carpeta)
             
-        super(SocNavHeteroDataset, self).__init__(data_path, transform, pre_transform, pre_filter)
+        super(SocNavHeteroDataset, self).__init__(self.carpeta_guardado, transform, pre_transform, pre_filter)
 
         # Checking if the dataset is already charged, if not, it calls the process method. Otherwise, it loads the pt file
 
-        dataset_path = os.path.join(self.processed_dir, 'dataset.pt')
-        if os.path.exists(dataset_path) and len(self.dataset) == 0:
-            checkpoint = torch.load(dataset_path, weights_only=False)
+        if os.path.exists(self.processed_paths[0]):
+            print("Cargando datos previamente guardados")
+            checkpoint = torch.load(self.processed_paths[0], weights_only=False)
             self.dataset = checkpoint['trajectories']
             self.labels = checkpoint['labels']
             self.slengths = checkpoint['slength']
@@ -78,14 +84,14 @@ class SocNavHeteroDataset(Dataset):
     
     @property
     def raw_dir(self):
-        return self.root
-        # return os.path.join(self.root, 'labeled')
+        return os.path.join(os.path.dirname(os.path.dirname(self.root)), 'labeled')
     
     @property
     def processed_dir(self):
-        return os.path.join(self.root)
+        return self.root
 
     def process(self):
+        print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
         limit = 25
         count = 0
@@ -121,9 +127,10 @@ class SocNavHeteroDataset(Dataset):
             if count == limit:
                 break
 
-        
-
-        torch.save({'trajectories':self.dataset, 'labels': self.labels, 'slength': self.slengths}, os.path.join(self.processed_dir, 'dataset.pt'))
+        torch.save(
+            {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
+            self.processed_paths[0]
+        )
 
 
     def get_all_features(self):
@@ -295,11 +302,84 @@ class SocNavHeteroDataset(Dataset):
 def collate(batch):
     sequences, labels, sequence_lengths = zip(*batch)  
 
+    print("Prueba etiquetas:", labels[:10])
+
     flat_graphs = [frame for traj in sequences for frame in traj]
     batched_graphs = Batch.from_data_list(flat_graphs)    
 
     labels_tensor = torch.stack(labels)  
     slengths_tensor = torch.stack(sequence_lengths)
 
+    print("Prueba etiquetas 2:", labels_tensor[:10])
+
     return batched_graphs, labels_tensor, slengths_tensor
+
         
+
+# if __name__ == "__main__":
+#     import os
+#     from pathlib import Path
+
+#     # --- CONFIGURACIÓN DE RUTAS ---
+#     DATA_PATH = '../../../dataset/labeled'
+#     CONTEXT_PATH = '../../../dataset/contexts/anthropic_claude_context.csv'
+    
+#     # Splits oficiales de tu TFG
+#     splits_a_cargar = ['train_set_socnav3.txt', 'val_set_socnav3.txt', 'test_set_socnav3.txt']
+    
+#     print("🚀 Iniciando el gestor de Datasets de SocNavHetero...")
+    
+#     # Diccionario para guardar tus datasets en memoria si quisieras usarlos más adelante
+#     datasets_en_memoria = {}
+
+#     for split_file in splits_a_cargar:
+#         nombre_split = Path(split_file).stem
+#         print(f"\n{'-'*60}")
+#         print(f"📂 Preparando split: {nombre_split.upper()}")
+#         print(f"{'-'*60}")
+        
+#         # Comprobamos de antemano si el archivo .pt ya existe para darte un feedback claro
+#         ruta_esperada_pt = os.path.join(DATA_PATH, "loading_files", nombre_split, "dataset.pt")
+#         if os.path.exists(ruta_esperada_pt):
+#             print(f"ℹ️  Caché detectada en: {ruta_esperada_pt}")
+#             print(f"⏳ Cargando datos directamente desde el fichero .pt (esto será ultra rápido)...")
+#         else:
+#             print(f"⚠️  No se encontró caché previa para el split '{nombre_split}'.")
+#             print(f"⚙️  Iniciando procesamiento completo de los archivos JSON...")
+
+#         try:
+#             # Instanciamos el dataset. Aquí PyG toma el control:
+#             # - Si el .pt existe: se salta 'process()' y va directo a tu constructor.
+#             # - Si el .pt NO existe: ejecuta 'process()', guarda el archivo y luego construye el objeto.
+#             dataset = SocNavHeteroDataset(
+#                 data_list_file=split_file,
+#                 data_path=DATA_PATH,
+#                 context_path=CONTEXT_PATH,
+#                 timestamp_threshold=0.3
+#             )
+            
+#             # Guardamos la instancia en el diccionario por si necesitas usarla en este script
+#             datasets_en_memoria[nombre_split] = dataset
+            
+#             print(f"✅ ¡Split '{nombre_split}' listo! Total de trayectorias en memoria: {len(dataset)}")
+            
+#             # --- PRUEBA DE INTEGRIDAD DE LOS DATOS ---
+#             # Si el dataset tiene elementos, inspeccionamos el primero para verificar que todo cuadre
+#             if len(dataset) > 0:
+#                 primer_elemento = dataset[0]  # Esto ejecuta tu método get(0)
+#                 trayectoria, label, slength = primer_elemento
+                
+#                 print(f"📊 Verificación del primer elemento:")
+#                 print(f"   • Número de frames en la secuencia: {len(trayectoria)} (slength original: {slength.item()})")
+#                 print(f"   • Tipo de dato del primer frame: {type(trayectoria[0]).__name__}")
+#                 print(f"   • Etiqueta asociada (label): {label.item()}")
+            
+#         except FileNotFoundError as e:
+#             print(f"❌ Error: Comprueba que el archivo de split '{split_file}' exista en '{DATA_PATH}/split/'")
+#             print(f"   Detalle del error: {e}")
+#         except Exception as e:
+#             print(f"❌ Error inesperado procesando el split '{split_file}': {e}")
+
+#     print(f"\n{'-'*60}")
+#     print("🎯 Proceso de inicialización finalizado.")
+#     print(f"{'-'*60}")

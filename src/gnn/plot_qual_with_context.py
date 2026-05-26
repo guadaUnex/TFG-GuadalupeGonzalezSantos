@@ -39,9 +39,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Load the checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 
-input_size = checkpoint['input_size']
-hidden_size = checkpoint['hidden_size']
 num_layers = checkpoint['num_layers']
+gnn_output = checkpoint['gnn_output']
+rnn_hidden_size = checkpoint['rnn_hidden_size']
+gnn_hidden_size = checkpoint['gnn_hidden_size']
+num_edges = checkpoint['num_edges']
+gnn_heads = checkpoint['gnn_heads']
+gnn_concat = checkpoint['gnn_concat']
+gnn_metadata = checkpoint['gnn_metadata']
 
 if 'use_new_context' in checkpoint.keys():
     USE_NEW_CONTEXT = checkpoint['use_new_context']
@@ -72,9 +77,9 @@ else:
     CONTEXT_FEATURES = 0
 
     
-model = RNNModel(input_size, hidden_size, num_layers, rnn_type = RNN_TYPE, linear_layers = LINEAR_LAYERS, activation=ACTIVATION, context_vars=CONTEXT_FEATURES).to(device)
-    
-model.to(device)
+model = HybridModel(num_layers, gnn_output, rnn_hidden_size, gnn_hidden_size, RNN_TYPE, num_edges,gnn_heads, gnn_concat, 
+                    gnn_metadata, linear_layers = LINEAR_LAYERS, rnn_activation = ACTIVATION, context_vars = CONTEXT_FEATURES)    
+model = model.to(device)
 # optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
 
@@ -119,10 +124,9 @@ for i_d, d in enumerate(FILES):
     q_indices = {}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(d)
-        qual_set = TrajectoryDataset(d, contextQ_file, path = data_root, frame_threshold = FRAME_THRESHOLD, label_exists= False, 
-                               overwrite_context=context, data_augmentation=False)
+        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, timestamp_threshold = FRAME_THRESHOLD)
         all_features = qual_set.get_all_features()
-        qual_loader = DataLoader(qual_set,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate_fn, num_workers = 4)
+        qual_loader = DataLoader(qual_set,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, num_workers = 4)
 
         dist_idx = all_features.index('robot_y')
         predictions = []

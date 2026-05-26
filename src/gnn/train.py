@@ -82,6 +82,13 @@ def train_model(rnn_data, gnn_data, num_layers,
         context_features = 0
 
     # ----------------------------------------
+    for trajectories, test_labels, slengths in train_dataloader:
+        print("Muestra de etiquetas reales de tu dataset (primeros 10):", test_labels[:10].tolist())
+        print("Suma de etiquetas en este batch:", test_labels.sum().item())
+        print("Muestra de longitudes de secuencias (slengths):", slengths[:10].tolist())
+        break # Solo miramos el primer batch para no saturar la consola
+    print("---------------------------------")
+
 
     val_dataset = SocNavHeteroDataset(data_list_file = DEV_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate, drop_last=True)
@@ -215,7 +222,14 @@ def train_model(rnn_data, gnn_data, num_layers,
                 'linear_layers': LINEAR_LAYERS,
                 'frame_threshold': TIMESTAMP_THRESHOLD,
                 'activation': ACTIVATION,
-                'context_features': context_features
+                'context_features': context_features,
+                'gnn_output': gnn_data['output'],
+                'rnn_hidden_size': rnn_data['hidden_channels'],
+                'gnn_hidden_size': gnn_data['hidden_channels'],
+                'num_edges': gnn_data['num_edges'],
+                'gnn_heads': gnn_data['heads'],
+                'gnn_concat': gnn_data['concat'],
+                'gnn_metadata': gnn_data['metadata']
             }
             
             torch.save(checkpoint, checkpoint_path)

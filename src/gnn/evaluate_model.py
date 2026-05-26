@@ -25,9 +25,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Load the checkpoint
 checkpoint = torch.load(checkpoint_path, map_location=device)
 
-input_size = checkpoint['input_size']
-hidden_size = checkpoint['hidden_size']
 num_layers = checkpoint['num_layers']
+gnn_output = checkpoint['gnn_output']
+rnn_hidden_size = checkpoint['rnn_hidden_size']
+gnn_hidden_size = checkpoint['gnn_hidden_size']
+num_edges = checkpoint['num_edges']
+gnn_heads = checkpoint['gnn_heads']
+gnn_concat = checkpoint['gnn_concat']
+gnn_metadata = checkpoint['gnn_metadata']
 
 if 'use_new_context' in checkpoint.keys():
     USE_NEW_CONTEXT = checkpoint['use_new_context']
@@ -58,8 +63,8 @@ else:
     CONTEXT_FEATURES = 0
 
 
-model = RNNModel(input_size, hidden_size, num_layers, rnn_type = RNN_TYPE, linear_layers = LINEAR_LAYERS, activation=ACTIVATION, context_vars=CONTEXT_FEATURES).to(device)
-    
+model = HybridModel(num_layers, gnn_output, rnn_hidden_size, gnn_hidden_size, RNN_TYPE, num_edges,gnn_heads, gnn_concat, 
+                    gnn_metadata, linear_layers = LINEAR_LAYERS, rnn_activation = ACTIVATION, context_vars = CONTEXT_FEATURES)    
 model = model.to(device)
 
 
@@ -67,9 +72,10 @@ model.load_state_dict(checkpoint['model_state_dict'], strict=True)
 
 datafile = args.dataset
 contextQ_file = args.context
+data_path = args.dataroot
 
-dataset = TrajectoryDataset(datafile, contextQ_file, path = args.dataroot, limit=-1, frame_threshold=FRAME_THRESHOLD, data_augmentation=False, reload = False)
-loader = DataLoader(dataset,batch_size=32, shuffle=False, collate_fn=collate_fn)
+dataset = SocNavHeteroDataset(datafile, data_path, contextQ_file, timestamp_threshold = FRAME_THRESHOLD)
+loader = DataLoader(dataset,batch_size=32, shuffle=False, collate_fn=collate)
 
 mse_function = torch.nn.MSELoss().to(device)
 mae_function = torch.nn.L1Loss().to(device)
