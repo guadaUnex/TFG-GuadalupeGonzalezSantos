@@ -12,7 +12,7 @@ class GAT(torch.nn.Module):
 
     def forward(self, x, edge_index):
         x = self.conv1(x, edge_index) 
-        # x = leaky_relu(x)
+        x = leaky_relu(x)
         x = self.conv2(x, edge_index) 
         return x
 
@@ -62,13 +62,16 @@ class HybridModel(nn.Module):
         self.context_vars = context_vars
 
         # self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
-        # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
-        self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
+        self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
+        # self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
 
         print("metadata")
         print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
+
+        print(self.gnn_block)
+        # exit()
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
 
@@ -126,14 +129,14 @@ class HybridModel(nn.Module):
     def forward(self, batch_data, slengths):
         # print(slengths)
 
-        for k, t in batch_data.x_dict.items():
-            print(k, t.shape)
-        for k, t in batch_data.edge_index_dict.items():
-            print(k, t.shape, t.dtype)
+        # for k, t in batch_data.x_dict.items():
+        #     print(k, t.shape)
+        # for k, t in batch_data.edge_index_dict.items():
+        #     print(k, t.shape, t.dtype)
         #     print(t)
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
-        for k, t in gnn_output.items():
-            print(k, t.shape)
+        # for k, t in gnn_output.items():
+        #     print(k, t.shape)
         # print(gnn_output)
         scenarios = gnn_output['scenario']
 

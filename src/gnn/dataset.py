@@ -98,7 +98,7 @@ class SocNavHeteroDataset(Dataset):
     def process(self):
         print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
-        limit = 25
+        limit = 100
         count = 0
 
         for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
@@ -180,21 +180,19 @@ class SocNavHeteroDataset(Dataset):
 
         # People nodes
         people = frame.get('people', [])
-        if people:
-            p_list = []
-            for p in people:
-                nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
-                p_list.append([nx, ny, na])
-            data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 3))
+        p_list = []
+        for p in people:
+            nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
+            p_list.append([nx, ny, na])
+        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 3))
 
         # Object nodes
         objects = frame.get('objects', [])
-        if objects:
-            o_list = []
-            for o in objects:
-                nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
-                o_list.append([nx, ny, na, o['shape']['width']/s, o['shape']['length']/s])
-            data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 5))
+        o_list = []
+        for o in objects:
+            nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
+            o_list.append([nx, ny, na, o['shape']['width']/s, o['shape']['length']/s])
+        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 5))
 
         # Walls nodes
         if walls:
@@ -204,8 +202,8 @@ class SocNavHeteroDataset(Dataset):
                 wx, wy, _ = self.transformer.transform_pose(pt[0].item(), pt[1].item(), 0.0, gx, gy, ga)
                 w_list.append([wx, wy])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
-        # else:
-        #     data['wall'].x = torch.empty((0, 2))
+        else:
+            data['wall'].x = torch.empty((0, 2))
        
         data = self._create_edges(data, full_conexo=full_conexo)
 
@@ -242,6 +240,13 @@ class SocNavHeteroDataset(Dataset):
         
         node_types = data.node_types
 
+        # self edges
+        for t in node_types:
+            num_nodes_of_type = data[t].x.size(0)
+            if True: #num_nodes_of_type>0:
+                edge_index_self = torch.arange(num_nodes_of_type, dtype=torch.long)
+                data[t, 'self', t].edge_index = edge_index_self
+
         if 'robot' in node_types and 'goal' in node_types:
             edge_index_rg = torch.tensor([[0], [0]], dtype=torch.long)
             
@@ -255,11 +260,11 @@ class SocNavHeteroDataset(Dataset):
 
         if 'scenario' in node_types:
             for t in node_types:
-                # if t == 'scenario':
-                #     continue
+                if t == 'scenario':
+                    continue
                 
                 num_nodes_of_type = data[t].x.size(0)
-                if num_nodes_of_type > 0:
+                if True: #num_nodes_of_type > 0:
                     row = torch.arange(num_nodes_of_type, dtype=torch.long)
                     col = torch.zeros(num_nodes_of_type, dtype=torch.long)
                     edge_index_in_scenario = torch.stack([row, col], dim=0)
@@ -311,15 +316,43 @@ class SocNavHeteroDataset(Dataset):
 def collate(batch):
     sequences, labels, sequence_lengths = zip(*batch)  
 
-    print("Prueba etiquetas:", labels[:10])
+    # print("Prueba etiquetas:", labels[:10])
+
+    node_names = ['scenario', 'goal', 'robot', 'human', 'object', 'wall']
+    edge_names = [('robot', 'targets', 'goal'), ('scenario', 'in', 'scenario'), ('goal', 'in', 'scenario'), ('robot', 'in', 'scenario'), ('human', 'in', 'scenario'), ('object', 'in', 'scenario'), ('wall', 'in', 'scenario')]
 
     flat_graphs = [frame for traj in sequences for frame in traj]
-    batched_graphs = Batch.from_data_list(flat_graphs)    
+    # print(flat_graphs[0].x_dict)
+    # exit()
+    # for graph in flat_graphs:
+    #     for edge in edge_names:
+    #         src = edge[0]
+    #         dst = edge[2]
+    #         if src in graph.x_dict.keys() and dst in graph.x_dict.keys():
+    #         # print(src, dst)
+    #         # print(graph[src])
+    #             len_src = graph.x_dict[src].shape[0]
+    #             len_dst = graph.x_dict[dst].shape[0]
+    #             indices = graph.edge_index_dict[edge]
+    #             for i in range(indices.shape[1]):
+    #                 i_src = indices[0,i]
+    #                 i_dst = indices[1,i]
+    #                 if i_src >= len_src or i_dst>=len_dst:
+    #                     print('error in indices', 'i_src', i_src, 'len_src', len_src, 
+    #                         'i_dst', i_dst, 'len_dst', len_dst)
+    #                     exit()
+            # else:
+            #     print(src,dst)
+
+    batched_graphs = Batch.from_data_list(flat_graphs)   
+    # for k, t in batched_graphs.x_dict.items():
+    #     print(k, t.shape)
+    # print(batched_graphs.edge_index_dict) 
 
     labels_tensor = torch.stack(labels)  
     slengths_tensor = torch.stack(sequence_lengths)
 
-    print("Prueba etiquetas 2:", labels_tensor[:10])
+    # print("Prueba etiquetas 2:", labels_tensor[:10])
 
     return batched_graphs, labels_tensor, slengths_tensor
 
