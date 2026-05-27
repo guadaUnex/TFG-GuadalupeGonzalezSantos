@@ -25,16 +25,18 @@ class SocNavHeteroDataset(Dataset):
         """
     
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv',
-                   transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3):
+                   transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False):
         """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
 
         print("Iniciando creación del siguiente dataset: ", data_list_file)
         
         self.data_list_file = data_list_file
 
+        self.trajectories_dir = data_path
+
         # Reading the dataset file
 
-        with open(os.path.join(data_path, 'split', data_list_file), 'r') as f:
+        with open(os.path.join(data_path, data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
 
         # Reading the context file
@@ -60,18 +62,20 @@ class SocNavHeteroDataset(Dataset):
         self.timestamp_threshold = timestamp_threshold
 
         nombre_carpeta = Path(self.data_list_file).stem
-        self.carpeta_guardado = os.path.join(data_path, "loading_files", nombre_carpeta)
+        self.carpeta_guardado = os.path.join(data_path, nombre_carpeta)
             
         super(SocNavHeteroDataset, self).__init__(self.carpeta_guardado, transform, pre_transform, pre_filter)
 
         # Checking if the dataset is already charged, if not, it calls the process method. Otherwise, it loads the pt file
 
-        if os.path.exists(self.processed_paths[0]):
+        if reload and os.path.exists(self.processed_paths[0]):
             print("Cargando datos previamente guardados")
             checkpoint = torch.load(self.processed_paths[0], weights_only=False)
             self.dataset = checkpoint['trajectories']
             self.labels = checkpoint['labels']
             self.slengths = checkpoint['slength']
+        else:
+            self.process()
 
 
     @property
@@ -84,7 +88,8 @@ class SocNavHeteroDataset(Dataset):
     
     @property
     def raw_dir(self):
-        return os.path.join(os.path.dirname(os.path.dirname(self.root)), 'labeled')
+        return self.trajectories_dir
+        # return os.path.join(os.path.dirname(os.path.dirname(self.root)), 'labeled')
     
     @property
     def processed_dir(self):
@@ -95,7 +100,7 @@ class SocNavHeteroDataset(Dataset):
         # Limites de pruebas
         limit = 25
         count = 0
-        
+
         for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
             with open(raw_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
@@ -112,7 +117,7 @@ class SocNavHeteroDataset(Dataset):
             prev_timestamp = json_data['sequence'][0]['timestamp']
 
             for frame_data in json_data['sequence']:
-                if (frame_data['timestamp'] - prev_timestamp) < self.timestamp_threshold:
+                if (frame_data['timestamp'] - prev_timestamp) > self.timestamp_threshold:
                     grafo_frame = self._json_to_heterodata(frame_data, walls, context)
                     trayectoria.append(grafo_frame)
                     prev_timestamp = frame_data['timestamp']
@@ -175,19 +180,21 @@ class SocNavHeteroDataset(Dataset):
 
         # People nodes
         people = frame.get('people', [])
-        p_list = []
-        for p in people:
-            nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
-            p_list.append([nx, ny, na])
-        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 3))
+        if people:
+            p_list = []
+            for p in people:
+                nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
+                p_list.append([nx, ny, na])
+            data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 3))
 
         # Object nodes
         objects = frame.get('objects', [])
-        o_list = []
-        for o in objects:
-            nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
-            o_list.append([nx, ny, na, o['shape']['width']/s, o['shape']['length']/s])
-        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 5))
+        if objects:
+            o_list = []
+            for o in objects:
+                nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
+                o_list.append([nx, ny, na, o['shape']['width']/s, o['shape']['length']/s])
+            data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 5))
 
         # Walls nodes
         if walls:
@@ -197,15 +204,15 @@ class SocNavHeteroDataset(Dataset):
                 wx, wy, _ = self.transformer.transform_pose(pt[0].item(), pt[1].item(), 0.0, gx, gy, ga)
                 w_list.append([wx, wy])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
-        else:
-            data['wall'].x = torch.empty((0, 2))
+        # else:
+        #     data['wall'].x = torch.empty((0, 2))
        
         data = self._create_edges(data, full_conexo=full_conexo)
 
         return data
     
 
-    def _sample_walls(self, walls, dist_points=0.2):
+    def _sample_walls(self, walls, dist_points=2.):
         wall_points = []
 
         for wall in walls:
@@ -259,42 +266,44 @@ class SocNavHeteroDataset(Dataset):
                     
                     data[t, 'in', 'scenario'].edge_index = edge_index_in_scenario
 
-        spatial_nodes = [t for t in node_types if t not in ['scenario']]
+        # spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
-        for i, type_a in enumerate(spatial_nodes):
-            for type_b in spatial_nodes[i:]:
+        # for i, type_a in enumerate(spatial_nodes):
+        #     for type_b in spatial_nodes[i:]:
 
-                if type_a == 'wall' and type_b == 'wall':
-                    continue
+        #         if type_a == 'wall' and type_b == 'wall':
+        #             continue
 
-                pos_a = data[type_a].x[:, :2]
-                pos_b = data[type_b].x[:, :2]
+        #         pos_a = data[type_a].x[:, :2]
+        #         pos_b = data[type_b].x[:, :2]
                 
-                if pos_a.numel() == 0 or pos_b.numel() == 0:
-                    continue
+        #         if pos_a.numel() == 0 or pos_b.numel() == 0:
+        #             continue
 
-                dists = torch.cdist(pos_a, pos_b)
+        #         dists = torch.cdist(pos_a, pos_b)
                 
-                if full_conexo:
-                    mask = torch.ones_like(dists, dtype=torch.bool)
-                else:
-                    mask = dists < dist_threshold
+        #         if full_conexo:
+        #             mask = torch.ones_like(dists, dtype=torch.bool)
+        #         else:
+        #             mask = dists < dist_threshold
+
+        #         # mask = mask.long()
                 
-                # if type_a == type_b:
-                #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
+        #         # if type_a == type_b:
+        #         #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
                 
-                edge_index = mask.nonzero(as_tuple=False).t()
+        #         edge_index = mask.nonzero(as_tuple=False).t()
                 
-                if edge_index.numel() > 0:
-                    edge_values = dists[mask].unsqueeze(1)
-                    rel_name = (type_a, 'near_to', type_b)
-                    data[rel_name].edge_index = edge_index
-                    data[rel_name].edge_attr = edge_values
+        #         if edge_index.numel() > 0:
+        #             edge_values = dists[mask].unsqueeze(1)
+        #             rel_name = (type_a, 'near_to', type_b)
+        #             data[rel_name].edge_index = edge_index.long()
+        #             data[rel_name].edge_attr = edge_values
                     
-                    if type_a != type_b:
-                        rev_rel = (type_b, 'near_to', type_a)
-                        data[rev_rel].edge_index = edge_index.flip(0)
-                        data[rev_rel].edge_attr = edge_values                     
+        #             if type_a != type_b:
+        #                 rev_rel = (type_b, 'near_to', type_a)
+        #                 data[rev_rel].edge_index = edge_index.flip(0).long()
+        #                 data[rev_rel].edge_attr = edge_values                     
                         
         return data
 

@@ -1,6 +1,55 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import leaky_relu
 from torch_geometric.nn import GATConv, Sequential, to_hetero
+
+class GAT(torch.nn.Module):
+    def __init__(self, hidden_channels, out_channels):
+        super().__init__()
+        self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False)
+
+        self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False)
+
+    def forward(self, x, edge_index):
+        x = self.conv1(x, edge_index) 
+        # x = leaky_relu(x)
+        x = self.conv2(x, edge_index) 
+        return x
+
+
+class GNNModel(nn.Module):
+    def __init__(self, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat):
+        super(GNNModel,self).__init__()
+        self.layers = []
+
+        # self.layers.append(GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
+        self.layers.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
+        self.layers.append(nn.LeakyReLU(inplace=True))
+        # self.non_linearity = nn.LeakyReLU(negative_slope=0.1)
+
+        for idx in range(len(gnn_hidden_channels) - 1):
+            input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
+            output_dim = gnn_hidden_channels[idx + 1]
+            heads = gnn_heads[idx + 1]
+            # self.layers.append(GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False))
+
+            self.layers.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False),
+                           'x, edge_index -> x'))
+            self.layers.append(nn.LeakyReLU(negative_slope=0.1))
+
+        input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
+        # self.layers.append(GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False))
+        self.layers.append((GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False), 
+                       'x, edge_index -> x'))
+
+        self.gnn_block = Sequential('x, edge_index', self.layers)
+
+    def forward(self, x, edge_index):
+        # for layer in self.layers:
+        #     x = layer(x, edge_index)
+        #     # x = self.non_linearity(x)
+        x = self.gnn_block(x, edge_index)
+        return x
 
 class HybridModel(nn.Module):
     def __init__(self, num_layers, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
@@ -12,8 +61,13 @@ class HybridModel(nn.Module):
         self.num_layers = num_layers
         self.context_vars = context_vars
 
-        self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
+        # self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
+        # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
+        self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
+
+        print("metadata")
+        print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
@@ -21,19 +75,19 @@ class HybridModel(nn.Module):
     def defineGnnBlock(self, gnn_hidden_channels, gnn_heads, gnn_concat):
         layers = []
 
-        layers.append((GATConv(-1, gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
+        layers.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
         layers.append(nn.LeakyReLU(inplace=True))
 
         for idx in range(len(gnn_hidden_channels) - 1):
             input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
-            layers.append((GATConv(input_dim, output_dim, heads, gnn_concat, add_self_loops=False),
+            layers.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False),
                            'x, edge_index -> x'))
             layers.append(nn.LeakyReLU(negative_slope=0.1))
 
         input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
-        layers.append((GATConv(input_dim, self.gnn_output, heads=1, concat=False, add_self_loops=False), 
+        layers.append((GATConv((-1, -1), self.gnn_output, heads=1, concat=False, add_self_loops=False), 
                        'x, edge_index -> x'))
 
         self.gnn_block = Sequential('x, edge_index', layers)
@@ -70,7 +124,17 @@ class HybridModel(nn.Module):
 
 
     def forward(self, batch_data, slengths):
+        # print(slengths)
+
+        for k, t in batch_data.x_dict.items():
+            print(k, t.shape)
+        for k, t in batch_data.edge_index_dict.items():
+            print(k, t.shape, t.dtype)
+        #     print(t)
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
+        for k, t in gnn_output.items():
+            print(k, t.shape)
+        # print(gnn_output)
         scenarios = gnn_output['scenario']
 
         num_trajectories = len(slengths)
