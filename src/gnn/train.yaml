@@ -1,13 +1,13 @@
-DATA_PATH: '../../../dataset/labeled'
+DATA_PATH: '../../../dataset/labeled/labeled'
 CONTEXT_FILE: '../../../dataset/contexts/anthropic_claude_context.csv'
 
-TRAIN_FILE: 'train_set_socnav3.txt'
-DEV_FILE: 'val_set_socnav3.txt'
-TEST_FILE: 'test_set_socnav3.txt'
+TRAIN_FILE: '../split/train_set_socnav3.txt'
+DEV_FILE: '../split/val_set_socnav3.txt'
+TEST_FILE: '../split/test_set_socnav3.txt'
 
 ACTIVATION: 'sigmoid'
 ADD_CONTEXT_TO_OUTPUT: True
-BATCH_SIZE: 32
+BATCH_SIZE: 4
 DROPOUT: 0.15
 GNN_CONCAT: True
 GNN_HEADS: [4, 4, 4, 4]
@@ -16,7 +16,7 @@ RNN_HIDDEN_SIZE: 256
 LINEAR_LAYERS: [256]
 LOSS: "mse"
 LR: 0.00001
-MAX_EPOCHS: 10000
+MAX_EPOCHS: 25
 MAX_PATIENCE: 20
 NUM_LAYERS: 4
 RNN_TYPE: 'GRU' #GRU or LSTM

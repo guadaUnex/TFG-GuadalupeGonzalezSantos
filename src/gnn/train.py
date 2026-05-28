@@ -83,13 +83,13 @@ def train_model(rnn_data, gnn_data, num_layers,
     else:
         context_features = 0
 
-    print(train_dataset.labels)
+    # print(train_dataset.labels)
     # ----------------------------------------
-    for trajectories, test_labels, slengths in train_dataloader:
-        print("Muestra de etiquetas reales de tu dataset (primeros 10):", test_labels[:10].tolist())
-        print("Suma de etiquetas en este batch:", test_labels.sum().item())
-        print("Muestra de longitudes de secuencias (slengths):", slengths[:10].tolist())
-        break # Solo miramos el primer batch para no saturar la consola
+    # for trajectories, test_labels, slengths in train_dataloader:
+    #     print("Muestra de etiquetas reales de tu dataset (primeros 10):", test_labels[:10].tolist())
+    #     print("Suma de etiquetas en este batch:", test_labels.sum().item())
+    #     print("Muestra de longitudes de secuencias (slengths):", slengths[:10].tolist())
+        # break # Solo miramos el primer batch para no saturar la consola
     print("---------------------------------")
 
 
