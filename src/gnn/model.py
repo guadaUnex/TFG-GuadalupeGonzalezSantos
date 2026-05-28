@@ -20,35 +20,31 @@ class GAT(torch.nn.Module):
 class GNNModel(nn.Module):
     def __init__(self, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat):
         super(GNNModel,self).__init__()
-        self.layers = []
+        self.layers = nn.ModuleList()
 
         # self.layers.append(GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
-        self.layers.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
-        self.layers.append(nn.LeakyReLU(inplace=True))
+        self.layers.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False)))
+        # self.layers.append(nn.LeakyReLU(inplace=True))
         # self.non_linearity = nn.LeakyReLU(negative_slope=0.1)
 
         for idx in range(len(gnn_hidden_channels) - 1):
-            input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
             # self.layers.append(GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False))
 
-            self.layers.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False),
-                           'x, edge_index -> x'))
-            self.layers.append(nn.LeakyReLU(negative_slope=0.1))
+            self.layers.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False)))
+            # self.layers.append(nn.LeakyReLU(negative_slope=0.1))
 
-        input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
         # self.layers.append(GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False))
-        self.layers.append((GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False), 
-                       'x, edge_index -> x'))
+        self.layers.append((GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False)))
 
-        self.gnn_block = Sequential('x, edge_index', self.layers)
+        # self.gnn_block = Sequential('x, edge_index', self.layers)
 
     def forward(self, x, edge_index):
-        # for layer in self.layers:
-        #     x = layer(x, edge_index)
-        #     # x = self.non_linearity(x)
-        x = self.gnn_block(x, edge_index)
+        for i, layer in enumerate(self.layers):
+            x = layer(x, edge_index)
+            if i < len(self.layers) - 1:
+                x = leaky_relu(x, negative_slope=0.1)
         return x
 
 class HybridModel(nn.Module):
@@ -62,15 +58,15 @@ class HybridModel(nn.Module):
         self.context_vars = context_vars
 
         # self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
-        self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
-        # self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
+        # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
+        self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
 
         print("metadata")
         print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
 
-        print(self.gnn_block)
+        # print(self.gnn_block)
         # exit()
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
@@ -93,7 +89,7 @@ class HybridModel(nn.Module):
         layers.append((GATConv((-1, -1), self.gnn_output, heads=1, concat=False, add_self_loops=False), 
                        'x, edge_index -> x'))
 
-        self.gnn_block = Sequential('x, edge_index', layers)
+        # self.gnn_block = Sequential('x, edge_index', layers)
 
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
@@ -134,10 +130,13 @@ class HybridModel(nn.Module):
         # for k, t in batch_data.edge_index_dict.items():
         #     print(k, t.shape, t.dtype)
         #     print(t)
+        
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
+
         # for k, t in gnn_output.items():
         #     print(k, t.shape)
         # print(gnn_output)
+
         scenarios = gnn_output['scenario']
 
         num_trajectories = len(slengths)
