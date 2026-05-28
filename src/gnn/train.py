@@ -60,7 +60,7 @@ COLORS = config_qtest["COLORS"]
 CONTEXTS = config_qtest["CONTEXTS"]
 ABBREVIATED_CONTEXTS = config_qtest["ABBREVIATED_CONTEXTS"]
 
-RELOAD = True
+RELOAD = False
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device:", device)
@@ -148,57 +148,57 @@ def train_model(rnn_data, gnn_data, num_layers,
                 loss = criterion(outputs.squeeze(), labels)
                 val_loss += loss.item()*len(labels)
 
-        # full_preds = []
-        # #Get Qualitative predictions and the plot
-        # fig, axes = plt.subplots(2, 2, figsize=(15, 6*2))
+        full_preds = []
+        #Get Qualitative predictions and the plot
+        fig, axes = plt.subplots(2, 2, figsize=(15, 6*2))
 
-        # axes = axes.reshape(1, -1)
+        axes = axes.reshape(1, -1)
 
-        # # Flatten the axes array for easy iteration
-        # axes_flat = axes.flatten()
+        # Flatten the axes array for easy iteration
+        axes_flat = axes.flatten()
 
-        # # Hide any unused subplots
-        # for i in range(4, len(axes_flat)):
-        #     axes_flat[i].set_visible(False)
-        # for i_d, speed in enumerate(list(qual_loaders.keys())):
-        #     q_preds = {}
-        #     q_list = qual_loaders[speed]
-        #     # for file in q_list:
-        #     # print(f"File : {q_list}")
-        #     for i, q_tuple in enumerate(q_list):
-        #         full_preds = []
-        #         # print(f"Q_tuple {i}:{len(q_tuple)}")
-        #         context, files, qual_loader, abbr_context = q_tuple
-        #         # print(f"Context :{context}, files: {files}, qual_loader: {qual_loader}")
-        #         with torch.no_grad():
-        #             # print(f"======================\n{filename=}")
-        #             for trajectories, _, slengths in qual_loader:
-        #                 # Pass the whole batched graph sequence to the model at once
-        #                 trajectories = trajectories.to(device)
-        #                 slengths = slengths.to(device)
-        #                 preds = model(trajectories, slengths)
-        #                 full_preds += preds.tolist()
-        #         # print(f"Predictions for Context {context}: \n {all_preds}")
-        #         q_preds[abbr_context] = full_preds
-        #     for idx, context in enumerate(q_preds.keys()):
-        #         # axes_flat[idx] = plot_qualitative_ratings(q_preds[context], speed, context, COLORS[i_d], ax=axes_flat[idx])
-        #         axes_flat[idx] = plot_qualitative_multiple(q_preds[context], speed, context, COLORS[i_d], ax=axes_flat[idx])
+        # Hide any unused subplots
+        for i in range(4, len(axes_flat)):
+            axes_flat[i].set_visible(False)
+        for i_d, speed in enumerate(list(qual_loaders.keys())):
+            q_preds = {}
+            q_list = qual_loaders[speed]
+            # for file in q_list:
+            # print(f"File : {q_list}")
+            for i, q_tuple in enumerate(q_list):
+                full_preds = []
+                # print(f"Q_tuple {i}:{len(q_tuple)}")
+                context, files, qual_loader, abbr_context = q_tuple
+                # print(f"Context :{context}, files: {files}, qual_loader: {qual_loader}")
+                with torch.no_grad():
+                    # print(f"======================\n{filename=}")
+                    for trajectories, _, slengths in qual_loader:
+                        # Pass the whole batched graph sequence to the model at once
+                        trajectories = trajectories.to(device)
+                        slengths = slengths.to(device)
+                        preds = model(trajectories, slengths)
+                        full_preds += preds.tolist()
+                # print(f"Predictions for Context {context}: \n {all_preds}")
+                q_preds[abbr_context] = full_preds
+            for idx, context in enumerate(q_preds.keys()):
+                # axes_flat[idx] = plot_qualitative_ratings(q_preds[context], speed, context, COLORS[i_d], ax=axes_flat[idx])
+                axes_flat[idx] = plot_qualitative_multiple(q_preds[context], speed, context, COLORS[i_d], ax=axes_flat[idx])
 
 
-        # # model_name = f"{save_dir[:10]}_ep_{str(epoch)}"
-        # plt.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
-        # save_dir = os.path.join('plots', SAVE_NAME+'_q_test')
-        # save_dir = save_dir if UPLOAD_TO_WANDB is False else os.path.join('plots',wandb.run.name)
-        # os.makedirs(save_dir, exist_ok=True)
-        # save_loc = os.path.join(save_dir, 'e_'+str(epoch+1))
-        # if SAVE_PLOTS_LOCALLY:
-        #     plt.savefig(save_loc)
-        # if UPLOAD_TO_WANDB:
-        #     q_plt_buf = io.BytesIO()
-        #     plt.savefig(q_plt_buf, format='png')
-        #     q_plt_buf.seek(0)
-        #     q_plt_img = wandb.Image(Image.open(q_plt_buf))
-        # plt.close()
+        # model_name = f"{save_dir[:10]}_ep_{str(epoch)}"
+        plt.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+        save_dir = os.path.join('plots', SAVE_NAME+'_q_test')
+        save_dir = save_dir if UPLOAD_TO_WANDB is False else os.path.join('plots',wandb.run.name)
+        os.makedirs(save_dir, exist_ok=True)
+        save_loc = os.path.join(save_dir, 'e_'+str(epoch+1))
+        if SAVE_PLOTS_LOCALLY:
+            plt.savefig(save_loc)
+        if UPLOAD_TO_WANDB:
+            q_plt_buf = io.BytesIO()
+            plt.savefig(q_plt_buf, format='png')
+            q_plt_buf.seek(0)
+            q_plt_img = wandb.Image(Image.open(q_plt_buf))
+        plt.close()
         
         val_loss /= len(val_dataset)
         val_losses.append(val_loss)
@@ -320,16 +320,16 @@ def get_qual_loader(file_path):
     # context = {"urgency":98., "importance":98., "risk":95 , "distance_from_human":95., "minimum_speed":20, "average_speed":15., "maximum_speed":15.}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(f"Creating q_test for: {context}")
-        qual_set = SocNavHeteroDataset(data_list_file = file_path, data_path = Q_TEST_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD)
+        qual_set = SocNavHeteroDataset(data_list_file = file_path, data_path = Q_TEST_PATH, context_path = CONTEXT_FILE, overwrite_contexts=context, timestamp_threshold = TIMESTAMP_THRESHOLD)
         qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
         q_loaders.append((context, files, qual_loader, abbreviated_context))
     return q_loaders
 # Load and process test datasets
 qual_loaders = {}
-# for id, path in enumerate(Q_FILES):
-#     speed = Q_NAMES[id]
-#     print(f"Processing files with {speed}")
-#     qual_loaders[speed] = get_qual_loader(os.path.join(Q_TEST_PATH,path))
+for id, path in enumerate(Q_FILES):
+    speed = Q_NAMES[id]
+    print(f"Processing files with {speed}")
+    qual_loaders[speed] = get_qual_loader(os.path.join(Q_TEST_PATH,path))
 
 model, checkpoint = train_model(
     rnn_data=rnn_data, 

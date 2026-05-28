@@ -24,8 +24,8 @@ class SocNavHeteroDataset(Dataset):
     timestamp_threshold (float): Maximum allowed time interval between consecutive frames.
         """
     
-    def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv',
-                   transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False):
+    def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv', 
+                   overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False):
         """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
 
         print("Iniciando creación del siguiente dataset: ", data_list_file)
@@ -44,6 +44,7 @@ class SocNavHeteroDataset(Dataset):
         self.context_df = pd.read_csv(context_path, index_col='context')
         self.context_features = ['urgency', 'importance', 'risk', 'distance_from_human', 'distance_from_object', 'speed', 'comfort', 
                                  'bumping_human', 'bumping_object', 'predictability']
+        self.overwrite_contexts = overwrite_contexts
         
         self.all_features = {
             'scenario': 2 + len(self.context_features), 
@@ -106,7 +107,7 @@ class SocNavHeteroDataset(Dataset):
                 json_data = json.load(f)
 
             walls = json_data.get('walls', [])
-            context_desc = json_data.get('context_description',[])
+            context_desc = json_data.get('context_description', self.overwrite_contexts)
             rating = json_data.get('label',[])
             lenght = 0
 
@@ -127,10 +128,10 @@ class SocNavHeteroDataset(Dataset):
             self.labels.append(rating)
             self.slengths.append(lenght)
 
-            count += 1
+            # count += 1
 
-            if count == limit:
-                break
+            # if count == limit:
+            #     break
 
         torch.save(
             {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
@@ -318,8 +319,8 @@ def collate(batch):
 
     # print("Prueba etiquetas:", labels[:10])
 
-    node_names = ['scenario', 'goal', 'robot', 'human', 'object', 'wall']
-    edge_names = [('robot', 'targets', 'goal'), ('scenario', 'in', 'scenario'), ('goal', 'in', 'scenario'), ('robot', 'in', 'scenario'), ('human', 'in', 'scenario'), ('object', 'in', 'scenario'), ('wall', 'in', 'scenario')]
+    # node_names = ['scenario', 'goal', 'robot', 'human', 'object', 'wall']
+    # edge_names = [('robot', 'targets', 'goal'), ('scenario', 'in', 'scenario'), ('goal', 'in', 'scenario'), ('robot', 'in', 'scenario'), ('human', 'in', 'scenario'), ('object', 'in', 'scenario'), ('wall', 'in', 'scenario')]
 
     flat_graphs = [frame for traj in sequences for frame in traj]
     # print(flat_graphs[0].x_dict)
