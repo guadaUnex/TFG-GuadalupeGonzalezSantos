@@ -130,7 +130,8 @@ class HybridModel(nn.Module):
         # for k, t in batch_data.edge_index_dict.items():
         #     print(k, t.shape, t.dtype)
         #     print(t)
-        
+
+        # print(batch_data.x_dict['scenario'])        
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
 
         # for k, t in gnn_output.items():
@@ -139,23 +140,40 @@ class HybridModel(nn.Module):
 
         scenarios = gnn_output['scenario']
 
+        # print('input shape', batch_data.x_dict.shape)
+
         num_trajectories = len(slengths)
         max_len = int(torch.max(slengths).item())
         features_dim = scenarios.size(-1)
 
+        # print('num_trajectories', num_trajectories)
+        # print('max_len', max_len)
+        # print('features_dim', features_dim)
+        # print('scenarios shape', scenarios.shape)
+
+        # batch_size x max_len x features_dim
         x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
 
         current_idx = 0
+        first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
+        
         for i, length in enumerate(slengths):
-            x_seq[i, :length] = scenarios[current_idx : current_idx + length]
+            first_graph_idx[i] = current_idx
+            x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
             current_idx += length
+
 
         rnn_output, _ = self.rnn_layer(x_seq)
 
+        # print('rnn_output shape', rnn_output.shape)
+
         out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
 
+        # print('output shape', out.shape)
         if self.context_vars > 0:
-            out = torch.concat((out, x_seq[:, 0, -self.context_vars:]), axis=1)
+            batch_context = batch_data.x_dict['scenario'][first_graph_idx, -self.context_vars:]
+            out = torch.concat((out, batch_context), axis=1)
+            # out = torch.concat((out, x_seq[:, 0, -self.context_vars:]), axis=1)
 
         for layer in self.fc_layers:
             out = layer(out)

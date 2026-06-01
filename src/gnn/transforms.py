@@ -14,7 +14,7 @@ class GoalFrameTransform:
         ny = dx * sin_t + dy * cos_t
         na = torch.atan2(torch.sin(angle - ga), torch.cos(angle - ga))
         
-        return nx / self.scale, ny / self.scale, na / 3.14159
+        return nx / self.scale, ny / self.scale, na 
 
     def transform_velocity(self, vx, vy, va, ga):
         sin_t, cos_t = torch.sin(-ga), torch.cos(-ga)

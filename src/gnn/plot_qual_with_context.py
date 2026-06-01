@@ -124,22 +124,34 @@ for i_d, d in enumerate(FILES):
     q_indices = {}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(d)
-        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, timestamp_threshold = FRAME_THRESHOLD)
+        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, overwrite_contexts=context, timestamp_threshold = FRAME_THRESHOLD, reload=True)
         all_features = qual_set.get_all_features()
-        qual_loader = DataLoader(qual_set,  batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, num_workers = 4)
+        qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 
-        dist_idx = all_features.index('robot_y')
+        dist_idx = 1
         predictions = []
         actual_labels = []
         val_loss = 0
         distances = []
+        # print(qual_set.dataset)
+        # print('----------')
         with torch.no_grad():
             for trajectories, _, slengths in qual_loader:
-                
-                for t in trajectories:
+                # print(slengths)
+                global_i = 0
+                for t in slengths:
                     distances_t = []
-                    for s in t:
-                        distances_t.append(s[dist_idx].to('cpu')*10)
+                    for i in range(t):
+                        ry = trajectories.x_dict['robot'][global_i, 1]
+                        distances_t.append(ry*10)
+                        global_i += 1
+                # for t in trajectories.x_dict['robot']:
+                #     distances_t = []
+                #     print(t)
+                #     for s in t:
+                #         ry = s[dist_idx].to('cpu')
+                #         # distances_t.append(s[dist_idx].to('cpu')*10)
+                #         distances_t.append(ry*10)
                     min_dist = np.max(np.array(distances_t))
                     max_dist = np.min(np.array(distances_t))
                     dist = min_dist if abs(min_dist) > abs(max_dist) else max_dist

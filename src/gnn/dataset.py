@@ -3,6 +3,7 @@ import json
 import torch
 import pandas as pd
 import numpy as np
+import math
 from pathlib import Path
 from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
@@ -47,12 +48,13 @@ class SocNavHeteroDataset(Dataset):
         self.overwrite_contexts = overwrite_contexts
         
         self.all_features = {
+            # success, min dist to human, context vars.
             'scenario': 2 + len(self.context_features), 
             'goal': 5,
-            'robot': 6,
-            'human': 3,
-            'object': 5,
-            'wall': 2
+            'robot': 10,
+            'human': 5,
+            'object': 7,
+            'wall': 3
         }
 
         self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
@@ -99,8 +101,10 @@ class SocNavHeteroDataset(Dataset):
     def process(self):
         print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
-        limit = 100
+        limit = 500
         count = 0
+
+        # print(self.raw_paths)
 
         for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
             with open(raw_path, 'r', encoding='utf-8') as f:
@@ -108,24 +112,24 @@ class SocNavHeteroDataset(Dataset):
 
             walls = json_data.get('walls', [])
             context_desc = json_data.get('context_description', self.overwrite_contexts)
-            rating = json_data.get('label',[])
+            rating = json_data.get('label',0.)
             lenght = 0
 
             context = list(self.context_df.loc[context_desc.rstrip()].to_dict().values())
             self.transformer.normalize_context(context)
 
             trayectoria = []
-            prev_timestamp = json_data['sequence'][0]['timestamp']
-
-            for frame_data in json_data['sequence']:
-                if (frame_data['timestamp'] - prev_timestamp) > self.timestamp_threshold:
+            prev_timestamp = -np.inf #json_data['sequence'][0]['timestamp']
+            last_i = len(json_data['sequence'])-1
+            for i, frame_data in enumerate(json_data['sequence']):
+                if (frame_data['timestamp'] - prev_timestamp) > self.timestamp_threshold or i == last_i:
                     grafo_frame = self._json_to_heterodata(frame_data, walls, context)
                     trayectoria.append(grafo_frame)
                     prev_timestamp = frame_data['timestamp']
                     lenght += 1
 
             self.dataset.append(trayectoria)
-            self.labels.append(rating)
+            self.labels.append([rating])
             self.slengths.append(lenght)
 
             # count += 1
@@ -138,6 +142,54 @@ class SocNavHeteroDataset(Dataset):
             self.processed_paths[0]
         )
 
+
+    def get_metadata(self):
+        metadata = (
+            ['scenario', 'goal', 'robot', 'human', 'object', 'wall'],
+            [
+                ('scenario', 'self', 'scenario'), 
+                ('goal', 'self', 'goal'), 
+                ('robot', 'self', 'robot'), 
+                ('human', 'self', 'human'), 
+                ('object', 'self', 'object'), 
+                ('wall', 'self', 'wall'), 
+                ('robot', 'targets', 'goal'),
+                ('goal', 'assigned_to', 'robot'), 
+                ('goal', 'in', 'scenario'), 
+                ('robot', 'in', 'scenario'), 
+                ('human', 'in', 'scenario'), 
+                ('object', 'in', 'scenario'), 
+                ('wall', 'in', 'scenario'), 
+                ('scenario', 'contains', 'goal'), 
+                ('scenario', 'contains', 'robot'), 
+                ('scenario', 'contains', 'human'), 
+                ('scenario', 'contains', 'object'), 
+                ('scenario', 'contains', 'wall'), 
+                ('goal', 'near_to', 'human'), 
+                ('human', 'near_to', 'goal'), 
+                ('goal', 'near_to', 'object'), 
+                ('object', 'near_to', 'goal'), 
+                ('goal', 'near_to', 'wall'), 
+                ('wall', 'near_to', 'goal'), 
+                ('goal', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'goal'), 
+                ('robot', 'near_to', 'wall'), 
+                ('wall', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'human'), 
+                ('human', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'object'), 
+                ('object', 'near_to', 'robot'), 
+                ('human', 'near_to', 'human'), 
+                ('human', 'near_to', 'object'), 
+                ('object', 'near_to', 'human'), 
+                ('human', 'near_to', 'wall'), 
+                ('wall', 'near_to', 'human'), 
+                ('object', 'near_to', 'object'),
+                ('object', 'near_to', 'wall'),
+                ('wall', 'near_to', 'object')                
+            ]
+        )
+        return metadata
 
     def get_all_features(self):
         return self.all_features
@@ -164,36 +216,43 @@ class SocNavHeteroDataset(Dataset):
 
         # We read de robot data first to save some information in the scenario node
         r = frame['robot']
+        g = frame['goal']
 
-        # Scenario node
-        scenario_features = [r['shape']['width']/s, r['shape']['length']/s] + context
-        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
+        dist_to_goal_pos = math.sqrt((r['x']-g['x'])**2 + (r['y']-g['y'])**2) 
+        angle_diff = r['angle']-g['angle']
+        dist_to_goal_angle = abs(math.atan2(math.sin(angle_diff), math.cos(angle_diff)))
+        success = 1. if (dist_to_goal_pos<g['pos_threshold']+0.1) and (dist_to_goal_angle<g['angle_threshold']) else 0.
 
         # Goal node
-        g = frame['goal']
+        
         gx, gy, ga = torch.tensor(g['x']), torch.tensor(g['y']), torch.tensor(g['angle'])
         data['goal'].x = torch.tensor([[0.0, 0.0, 0, g['pos_threshold']/s, g['angle_threshold']/3.14]], dtype=torch.float)
 
         # Robot node
-        nx, ny, na = self.transformer.transform_pose(r['x'], r['y'], r['angle'], gx, gy, ga)
+        rx, ry, ra = self.transformer.transform_pose(r['x'], r['y'], r['angle'], gx, gy, ga)
         nvx, nvy, nva = self.transformer.transform_velocity(r['speed_x'], r['speed_y'], r['speed_a'], ga)
-        data['robot'].x = torch.tensor([[nx, ny, na, nvx, nvy, nva]], dtype=torch.float)
+        dist_to_goal = math.sqrt(rx**2+ry**2)
+        data['robot'].x = torch.tensor([[rx, ry, math.sin(ra), math.cos(ra), r['shape']['width']/s, r['shape']['length']/s, nvx, nvy, nva, dist_to_goal]], dtype=torch.float)
 
         # People nodes
+        min_HR_dist = 1.
         people = frame.get('people', [])
         p_list = []
         for p in people:
             nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
-            p_list.append([nx, ny, na])
-        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 3))
+            dist_to_robot = math.sqrt((nx-rx)**2+(ny-ry)**2)
+            min_HR_dist = min(dist_to_robot, min_HR_dist)
+            p_list.append([nx, ny, math.sin(na), math.cos(na), dist_to_robot])
+        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 5))
 
         # Object nodes
         objects = frame.get('objects', [])
         o_list = []
         for o in objects:
             nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
-            o_list.append([nx, ny, na, o['shape']['width']/s, o['shape']['length']/s])
-        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 5))
+            dist_to_robot = math.sqrt((nx-rx)**2+(ny-ry)**2)
+            o_list.append([nx, ny, math.sin(na), math.cos(na), o['shape']['width']/s, o['shape']['length']/s, dist_to_robot])
+        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 7))
 
         # Walls nodes
         if walls:
@@ -201,11 +260,16 @@ class SocNavHeteroDataset(Dataset):
             w_list = []
             for pt in raw_points:
                 wx, wy, _ = self.transformer.transform_pose(pt[0].item(), pt[1].item(), 0.0, gx, gy, ga)
-                w_list.append([wx, wy])
+                dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
+                w_list.append([wx, wy, dist_to_robot])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
         else:
-            data['wall'].x = torch.empty((0, 2))
-       
+            data['wall'].x = torch.empty((0, 3))
+
+        # Scenario node
+        scenario_features = [success, min_HR_dist]+ context
+        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
+
         data = self._create_edges(data, full_conexo=full_conexo)
 
         return data
@@ -237,16 +301,18 @@ class SocNavHeteroDataset(Dataset):
         
         return unique_points
 
-    def _create_edges(self, data, full_conexo=False, dist_threshold=0.25):
+    def _create_edges(self, data, full_conexo=False, dist_threshold=0.1):
         
         node_types = data.node_types
 
         # self edges
         for t in node_types:
             num_nodes_of_type = data[t].x.size(0)
-            if True: #num_nodes_of_type>0:
-                edge_index_self = torch.arange(num_nodes_of_type, dtype=torch.long)
+            if num_nodes_of_type>0:
+                node_idx = torch.arange(num_nodes_of_type, dtype=torch.long)
+                edge_index_self = torch.stack([node_idx, node_idx], dim=0)
                 data[t, 'self', t].edge_index = edge_index_self
+                data[t, 'self', t].edge_attr = torch.tensor([1.]*num_nodes_of_type, dtype=torch.float)
 
         if 'robot' in node_types and 'goal' in node_types:
             edge_index_rg = torch.tensor([[0], [0]], dtype=torch.long)
@@ -258,6 +324,9 @@ class SocNavHeteroDataset(Dataset):
 
             data['robot', 'targets', 'goal'].edge_index = edge_index_rg
             data['robot', 'targets', 'goal'].edge_attr = edge_attr_rg
+            data['goal', 'assigned_to', 'goal'].edge_index = edge_index_rg
+            data['goal', 'assigned_to', 'goal'].edge_attr = edge_attr_rg
+
 
         if 'scenario' in node_types:
             for t in node_types:
@@ -265,95 +334,78 @@ class SocNavHeteroDataset(Dataset):
                     continue
                 
                 num_nodes_of_type = data[t].x.size(0)
-                if True: #num_nodes_of_type > 0:
+                if num_nodes_of_type > 0:
                     row = torch.arange(num_nodes_of_type, dtype=torch.long)
                     col = torch.zeros(num_nodes_of_type, dtype=torch.long)
                     edge_index_in_scenario = torch.stack([row, col], dim=0)
+                    edge_index_contains_scenario = torch.stack([col, row], dim=0)
                     
                     data[t, 'in', 'scenario'].edge_index = edge_index_in_scenario
+                    data[t, 'in', 'scenario'].edge_attr = torch.tensor([1.]*num_nodes_of_type, dtype=torch.float)
+                    data['scenario', 'contains', t].edge_index = edge_index_contains_scenario
+                    data['scenario', 'contains', t].edge_attr = torch.tensor([1.]*num_nodes_of_type, dtype=torch.float)
 
-        # spatial_nodes = [t for t in node_types if t not in ['scenario']]
+        
+        spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
-        # for i, type_a in enumerate(spatial_nodes):
-        #     for type_b in spatial_nodes[i:]:
+        for i, type_a in enumerate(spatial_nodes):
+            for type_b in spatial_nodes[i:]:
 
-        #         if type_a == 'wall' and type_b == 'wall':
-        #             continue
+                if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
+                    continue
 
-        #         pos_a = data[type_a].x[:, :2]
-        #         pos_b = data[type_b].x[:, :2]
+                pos_a = data[type_a].x[:, :2]
+                pos_b = data[type_b].x[:, :2]
                 
-        #         if pos_a.numel() == 0 or pos_b.numel() == 0:
-        #             continue
+                if pos_a.numel() == 0 or pos_b.numel() == 0:
+                    continue
 
-        #         dists = torch.cdist(pos_a, pos_b)
+                dists = torch.cdist(pos_a, pos_b)
                 
-        #         if full_conexo:
-        #             mask = torch.ones_like(dists, dtype=torch.bool)
-        #         else:
-        #             mask = dists < dist_threshold
+                if full_conexo:
+                    mask = torch.ones_like(dists, dtype=torch.bool)
+                else:
+                    mask = dists < dist_threshold
 
-        #         # mask = mask.long()
+                # mask = mask.long()
                 
-        #         # if type_a == type_b:
-        #         #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
+                # if type_a == type_b:
+                #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
                 
-        #         edge_index = mask.nonzero(as_tuple=False).t()
+                edge_index = mask.nonzero(as_tuple=False).t()
                 
-        #         if edge_index.numel() > 0:
-        #             edge_values = dists[mask].unsqueeze(1)
-        #             rel_name = (type_a, 'near_to', type_b)
-        #             data[rel_name].edge_index = edge_index.long()
-        #             data[rel_name].edge_attr = edge_values
+                if edge_index.numel() > 0:
+                    edge_values = dists[mask].unsqueeze(1)
+                    rel_name = (type_a, 'near_to', type_b)
+                    data[rel_name].edge_index = edge_index.long()
+                    data[rel_name].edge_attr = edge_values
                     
-        #             if type_a != type_b:
-        #                 rev_rel = (type_b, 'near_to', type_a)
-        #                 data[rev_rel].edge_index = edge_index.flip(0).long()
-        #                 data[rev_rel].edge_attr = edge_values                     
-                        
+                    if type_a != type_b:
+                        rev_rel = (type_b, 'near_to', type_a)
+                        data[rev_rel].edge_index = edge_index.flip(0).long()
+                        data[rev_rel].edge_attr = edge_values                     
+
+        edge_types_metadata = self.get_metadata()[1]  
+
+        for edge_type in edge_types_metadata:
+            if edge_type not in data.edge_types:
+                data[edge_type].edge_index = torch.empty((2, 0), dtype=torch.long)
+                data[edge_type].edge_attr = torch.empty((0), dtype=torch.float)
         return data
 
 
 def collate(batch):
     sequences, labels, sequence_lengths = zip(*batch)  
 
-    # print("Prueba etiquetas:", labels[:10])
-
-    # node_names = ['scenario', 'goal', 'robot', 'human', 'object', 'wall']
-    # edge_names = [('robot', 'targets', 'goal'), ('scenario', 'in', 'scenario'), ('goal', 'in', 'scenario'), ('robot', 'in', 'scenario'), ('human', 'in', 'scenario'), ('object', 'in', 'scenario'), ('wall', 'in', 'scenario')]
 
     flat_graphs = [frame for traj in sequences for frame in traj]
-    # print(flat_graphs[0].x_dict)
-    # exit()
-    # for graph in flat_graphs:
-    #     for edge in edge_names:
-    #         src = edge[0]
-    #         dst = edge[2]
-    #         if src in graph.x_dict.keys() and dst in graph.x_dict.keys():
-    #         # print(src, dst)
-    #         # print(graph[src])
-    #             len_src = graph.x_dict[src].shape[0]
-    #             len_dst = graph.x_dict[dst].shape[0]
-    #             indices = graph.edge_index_dict[edge]
-    #             for i in range(indices.shape[1]):
-    #                 i_src = indices[0,i]
-    #                 i_dst = indices[1,i]
-    #                 if i_src >= len_src or i_dst>=len_dst:
-    #                     print('error in indices', 'i_src', i_src, 'len_src', len_src, 
-    #                         'i_dst', i_dst, 'len_dst', len_dst)
-    #                     exit()
-            # else:
-            #     print(src,dst)
 
     batched_graphs = Batch.from_data_list(flat_graphs)   
-    # for k, t in batched_graphs.x_dict.items():
-    #     print(k, t.shape)
-    # print(batched_graphs.edge_index_dict) 
+
 
     labels_tensor = torch.stack(labels)  
     slengths_tensor = torch.stack(sequence_lengths)
 
-    # print("Prueba etiquetas 2:", labels_tensor[:10])
 
     return batched_graphs, labels_tensor, slengths_tensor
 

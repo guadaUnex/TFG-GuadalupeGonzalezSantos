@@ -126,7 +126,7 @@ def train_model(rnn_data, gnn_data, num_layers,
             slengths = slengths.to(device)
             outputs = model(trajectories, slengths)
 
-            loss = criterion(outputs.squeeze(), labels)
+            loss = criterion(outputs, labels)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -145,7 +145,7 @@ def train_model(rnn_data, gnn_data, num_layers,
                 labels = labels.to(device)
                 slengths = slengths.to(device)
                 outputs = model(trajectories, slengths)
-                loss = criterion(outputs.squeeze(), labels)
+                loss = criterion(outputs, labels)
                 val_loss += loss.item()*len(labels)
 
         full_preds = []
@@ -302,7 +302,7 @@ gnn_data = {
     'num_edges': len(sample_graph.edge_index_dict),         
     'heads': GNN_HEADS,               
     'concat': GNN_CONCAT,         
-    'metadata': sample_graph.metadata()                     
+    'metadata': test_dataset.get_metadata()                     
 }
 
 # Construimos rnn_data dinámicamente
@@ -321,7 +321,7 @@ def get_qual_loader(file_path):
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(f"Creating q_test for: {context}")
         qual_set = SocNavHeteroDataset(data_list_file = file_path, data_path = Q_TEST_PATH, context_path = CONTEXT_FILE, overwrite_contexts=context, timestamp_threshold = TIMESTAMP_THRESHOLD)
-        qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
+        qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, drop_last=True)
         q_loaders.append((context, files, qual_loader, abbreviated_context))
     return q_loaders
 # Load and process test datasets
