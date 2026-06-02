@@ -10,8 +10,10 @@ from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Dataset, HeteroData, Batch
 from transforms import GoalFrameTransform
 
-from data_conversions import clone_sequence
+from data_conversions import clone_sequence, sequence_to_tensor
 from data_mirroring import mirror_sequence
+from data_normalization import tensor_transform_to_goal_fr
+import metrics
 
 class SocNavHeteroDataset(Dataset):
     """Heterogeneous Dataset for Social Navigation. 
@@ -42,6 +44,17 @@ class SocNavHeteroDataset(Dataset):
 
         with open(os.path.join(data_path, data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
+
+        self.metrics_features = ['success', 'dist_nearest_hum', 'dist_nearest_obj', 'hum_collision_flag', 'object_collision_flag', 
+                                'social_space_intrusionA', 'social_space_intrusionB', 'social_space_intrusionC', 
+                                'num_near_humansA', 'num_near_humansB', 'num_near_humansC', 'min_time_to_collision', 'min_time_to_collision2', 
+                                'max_fear', 'max_panic', 'global_dist_nearest_hum', 'path_efficiency_ratio', 'step_ratio', 'episode_end']
+        
+        self.max_metric_values = {'success': 1, 'dist_nearest_hum': 10, 'dist_nearest_obj': 10, 'hum_collision_flag': 1, 
+                                  'object_collision_flag': 1, 'social_space_intrusionA': 1, 'social_space_intrusionB': 1, 'social_space_intrusionC': 1,
+                                  'num_near_humansA': 10, 'num_near_humansB': 10, 'num_near_humansC': 10, 'min_time_to_collision': self.MAX_TTC, 
+                                  'min_time_to_collision2': self.MAX_TTC**2, 'max_fear': 10, 'max_panic': 10,
+                                  'global_dist_nearest_hum': 10, 'path_efficiency_ratio': 1, 'step_ratio': 1, 'episode_end': 1}
 
         # Reading the context file
 
@@ -114,34 +127,38 @@ class SocNavHeteroDataset(Dataset):
             with open(raw_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
 
-            walls = json_data.get('walls', [])
             context_desc = json_data.get('context_description', self.overwrite_contexts)
+            walls = json_data.get('walls', [])
             rating = json_data.get('label',0.)
             lenght = 0
+
+            tensor_dict = sequence_to_tensor(json_data, self.timestamp_threshold, context_desc)
+
+            tensor_dict_to_goal = tensor_transform_to_goal_fr(tensor_dict)
+
+            metrics_sequence = metrics.compute_metrics(tensor_dict_to_goal)
+
+            normalized_metrics = metrics.normalize_and_cat_features(metrics_sequence, self.max_metric_values, self.all_features)
 
             context = list(self.context_df.loc[context_desc.rstrip()].to_dict().values())
             self.transformer.normalize_context(context)
 
             trayectoria = []
-            prev_timestamp = -np.inf #json_data['sequence'][0]['timestamp']
-            last_i = len(json_data['sequence'])-1
-            for i, frame_data in enumerate(json_data['sequence']):
-                if (frame_data['timestamp'] - prev_timestamp) > self.timestamp_threshold or i == last_i:
-                    grafo_frame = self._json_to_heterodata(frame_data, walls, context)
-                    trayectoria.append(grafo_frame)
-                    prev_timestamp = frame_data['timestamp']
-                    lenght += 1
+            for i, frame in enumerate(json_data['sequence']):
+                grafo = self._json_to_heterodata(frame, walls, context, normalized_metrics)
+                trayectoria.append(grafo)
+                lenght += 1
 
             self.dataset.append(trayectoria)
             self.labels.append([rating])
             self.slengths.append(lenght)
 
-            if self.data_augmentation:
-                cloned_trajectory = clone_sequence(trayectoria)
-                t_data_mirrored = mirror_sequence(cloned_trajectory)
-                self.dataset.append(t_data_mirrored)
-                self.labels.append([rating])
-                self.slengths.append(lenght)
+            # if self.data_augmentation:
+            #     cloned_trajectory = clone_sequence(trayectoria)
+            #     t_data_mirrored = mirror_sequence(cloned_trajectory)
+            #     self.dataset.append(t_data_mirrored)
+            #     self.labels.append([rating])
+            #     self.slengths.append(lenght)
 
             # count += 1
 
@@ -220,7 +237,7 @@ class SocNavHeteroDataset(Dataset):
 
     # --- MÉTODOS AUXILIARES ---
 
-    def _json_to_heterodata(self, frame, walls, context, full_conexo=False):
+    def _json_to_heterodata(self, frame, walls, context, metrics, full_conexo=False):
         data = HeteroData()
         s = self.transformer.scale  
         v = self.transformer.v_max
@@ -277,7 +294,7 @@ class SocNavHeteroDataset(Dataset):
             data['wall'].x = torch.empty((0, 3))
 
         # Scenario node
-        scenario_features = [success, min_HR_dist]+ context
+        scenario_features = [success, min_HR_dist]+ context + metrics
         data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
 
         data = self._create_edges(data, full_conexo=full_conexo)
