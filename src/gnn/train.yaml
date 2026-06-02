@@ -8,6 +8,7 @@ TEST_FILE: '../split/test_set_socnav3.txt'
 ACTIVATION: 'sigmoid'
 ADD_CONTEXT_TO_OUTPUT: True
 BATCH_SIZE: 4
+DATA_AUGMENTATION: True
 DROPOUT: 0.15
 GNN_CONCAT: True
 GNN_HEADS: [4, 4, 4, 4]

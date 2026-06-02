@@ -10,6 +10,9 @@ from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Dataset, HeteroData, Batch
 from transforms import GoalFrameTransform
 
+from data_conversions import clone_sequence
+from data_mirroring import mirror_sequence
+
 class SocNavHeteroDataset(Dataset):
     """Heterogeneous Dataset for Social Navigation. 
 
@@ -26,7 +29,7 @@ class SocNavHeteroDataset(Dataset):
         """
     
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv', 
-                   overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False):
+                   overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False, data_augmentation = False):
         """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
 
         print("Iniciando creación del siguiente dataset: ", data_list_file)
@@ -46,6 +49,7 @@ class SocNavHeteroDataset(Dataset):
         self.context_features = ['urgency', 'importance', 'risk', 'distance_from_human', 'distance_from_object', 'speed', 'comfort', 
                                  'bumping_human', 'bumping_object', 'predictability']
         self.overwrite_contexts = overwrite_contexts
+        self.data_augmentation = data_augmentation
         
         self.all_features = {
             # success, min dist to human, context vars.
@@ -101,7 +105,7 @@ class SocNavHeteroDataset(Dataset):
     def process(self):
         print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
-        limit = 500
+        limit = 25
         count = 0
 
         # print(self.raw_paths)
@@ -131,6 +135,13 @@ class SocNavHeteroDataset(Dataset):
             self.dataset.append(trayectoria)
             self.labels.append([rating])
             self.slengths.append(lenght)
+
+            if self.data_augmentation:
+                cloned_trajectory = clone_sequence(trayectoria)
+                t_data_mirrored = mirror_sequence(cloned_trajectory)
+                self.dataset.append(t_data_mirrored)
+                self.labels.append([rating])
+                self.slengths.append(lenght)
 
             # count += 1
 
@@ -224,7 +235,6 @@ class SocNavHeteroDataset(Dataset):
         success = 1. if (dist_to_goal_pos<g['pos_threshold']+0.1) and (dist_to_goal_angle<g['angle_threshold']) else 0.
 
         # Goal node
-        
         gx, gy, ga = torch.tensor(g['x']), torch.tensor(g['y']), torch.tensor(g['angle'])
         data['goal'].x = torch.tensor([[0.0, 0.0, 0, g['pos_threshold']/s, g['angle_threshold']/3.14]], dtype=torch.float)
 
@@ -412,69 +422,110 @@ def collate(batch):
         
 
 # if __name__ == "__main__":
-#     import os
-#     from pathlib import Path
+#     print("🚀 Lanzando suite de prueba para verificación de Mirroring (Data Augmentation)...")
 
-#     # --- CONFIGURACIÓN DE RUTAS ---
-#     DATA_PATH = '../../../dataset/labeled'
+#     # --- Configuración de rutas de pruebas ---
+#     DATA_PATH = '../../../dataset/labeled/labeled'
 #     CONTEXT_PATH = '../../../dataset/contexts/anthropic_claude_context.csv'
-    
-#     # Splits oficiales de tu TFG
-#     splits_a_cargar = ['train_set_socnav3.txt', 'val_set_socnav3.txt', 'test_set_socnav3.txt']
-    
-#     print("🚀 Iniciando el gestor de Datasets de SocNavHetero...")
-    
-#     # Diccionario para guardar tus datasets en memoria si quisieras usarlos más adelante
-#     datasets_en_memoria = {}
+#     SPLIT_PRUEBA = '../split/train_set_socnav3.txt' # Asegúrate de que este archivo existe para la prueba
 
-#     for split_file in splits_a_cargar:
-#         nombre_split = Path(split_file).stem
-#         print(f"\n{'-'*60}")
-#         print(f"📂 Preparando split: {nombre_split.upper()}")
-#         print(f"{'-'*60}")
+#     # 1. Instanciamos el Dataset FORZANDO el Data Augmentation y recreando el procesamiento
+#     print("\n[PASO 1] Instanciando dataset con data_augmentation=True...")
+#     try:
+#         dataset = SocNavHeteroDataset(
+#             data_list_file=SPLIT_PRUEBA,
+#             data_path=DATA_PATH,
+#             context_path=CONTEXT_PATH,
+#             timestamp_threshold=0.3,
+#             data_augmentation=True,   # 🌟 ACTIVAMOS EL AUMENTO
+#             reload=False              # 🌟 FORZAMOS REPROCESAMIENTO para ver el espejo en acción
+#         )
+#     except Exception as e:
+#         print(f"❌ Error al instanciar el dataset: {e}")
+#         print("Asegúrate de que las rutas relativas sean correctas desde la carpeta donde ejecutas este script.")
+#         exit(1)
+
+#     print(f"\n[PASO 2] Dataset cargado. Muestras totales generadas: {len(dataset)}")
+    
+#     if len(dataset) < 2:
+#         print("❌ Error: Se necesitan al menos 2 muestras en el dataset para validar el reflejo.")
+#         exit(1)
+
+#     # 2. Extracción de la pareja de prueba
+#     # Debido a tu lógica en 'process()', la muestra 0 es la Original y la muestra 1 es su versión Espejo.
+#     print("\n[PASO 3] Extrayendo pareja simétrica (Muestra 0 [Original] vs Muestra 1 [Espejo])...")
+#     traj_orig, label_orig, len_orig = dataset[0]
+#     traj_mirr, label_mirr, len_mirr = dataset[1]
+
+#     # --- TEST 1: Longitudes y Etiquetas ---
+#     print("\n🔍 --- TEST 1: Consistencia de Metadatos y Estructura temporal ---")
+#     print(f"• Longitud temporal original: {len_orig.item()} | Longitud espejo: {len_mirr.item()}")
+#     print(f"• Etiqueta original: {label_orig.item()} | Etiqueta espejo: {label_mirr.item()}")
+    
+#     assert len_orig.item() == len_mirr.item(), "❌ FALLO: Las longitudes temporales difieren."
+#     assert len(traj_orig) == len(traj_mirr), "❌ FALLO: El conteo de grafos (frames) internos difiere."
+#     assert torch.equal(label_orig, label_orig), "❌ FALLO: Las etiquetas sufrieron alteraciones."
+#     print("✅ TEST 1 COMPLETADO: Estructura y dimensiones idénticas.")
+
+#     # --- TEST 2: Inversión Geométrica de Tensores (Matemática de Nodos) ---
+#     print("\n🔍 --- TEST 2: Verificación analítica de los signos en el Eje Y ---")
+    
+#     # Analizamos el primer frame de la secuencia para verificar los nodos
+#     frame_orig = traj_orig[0]
+#     frame_mirr = traj_mirr[0]
+    
+#     # 📝 Verificación del Robot
+#     # Estructura de data['robot'].x según tu código: [rx, ry, sin(ra), cos(ra), w, l, nvx, nvy, nva, dist]
+#     # Deben invertirse: ry (index 1), sin(ra) (index 2), nvy (index 7), nva (index 8)
+#     r_orig = frame_orig['robot'].x[0]
+#     r_mirr = frame_mirr['robot'].x[0]
+    
+#     print("\n🤖 Datos del Robot (Primer Frame):")
+#     print(f"  • Posición Y -> Original: {r_orig[1].item():.4f} | Espejo: {r_mirr[1].item():.4f}")
+#     print(f"  • Seno Ángulo -> Original: {r_orig[2].item():.4f} | Espejo: {r_mirr[2].item():.4f}")
+#     print(f"  • Vel. Lineal Y -> Original: {r_orig[7].item():.4f} | Espejo: {r_mirr[7].item():.4f}")
+#     print(f"  • Vel. Angular -> Original: {r_orig[8].item():.4f} | Espejo: {r_mirr[8].item():.4f}")
+    
+#     # Comprobaciones matemáticas tolerantes a precisión flotante
+#     assert torch.allclose(r_orig[1], -r_mirr[1]), "❌ FALLO: La posición 'y' del robot no se invirtió correctamente."
+#     assert torch.allclose(r_orig[2], -r_mirr[2]), "❌ FALLO: El ángulo (sin) del robot no se invirtió correctamente."
+#     assert torch.allclose(r_orig[7], -r_mirr[7]), "❌ FALLO: La velocidad 'vy' del robot no se invirtió correctamente."
+#     assert torch.allclose(r_orig[8], -r_mirr[8]), "❌ FALLO: La velocidad angular 'va' del robot no se invirtió correctamente."
+#     print("  => OK: El robot se refleja de manera simétrica perfecta.")
+
+#     # 📝 Verificación de Humanos (Si existen en el escenario)
+#     # Estructura: [nx, ny, sin(na), cos(na), dist_to_robot]
+#     if frame_orig['human'].x.size(0) > 0:
+#         h_orig = frame_orig['human'].x[0]
+#         h_mirr = frame_mirr['human'].x[0]
+#         print("\n👥 Datos del Humano 0 (Primer Frame):")
+#         print(f"  • Posición Y -> Original: {h_orig[1].item():.4f} | Espejo: {h_mirr[1].item():.4f}")
+#         print(f"  • Seno Ángulo -> Original: {h_orig[2].item():.4f} | Espejo: {h_mirr[2].item():.4f}")
         
-#         # Comprobamos de antemano si el archivo .pt ya existe para darte un feedback claro
-#         ruta_esperada_pt = os.path.join(DATA_PATH, "loading_files", nombre_split, "dataset.pt")
-#         if os.path.exists(ruta_esperada_pt):
-#             print(f"ℹ️  Caché detectada en: {ruta_esperada_pt}")
-#             print(f"⏳ Cargando datos directamente desde el fichero .pt (esto será ultra rápido)...")
-#         else:
-#             print(f"⚠️  No se encontró caché previa para el split '{nombre_split}'.")
-#             print(f"⚙️  Iniciando procesamiento completo de los archivos JSON...")
+#         assert torch.allclose(h_orig[1], -h_mirr[1]), "❌ FALLO: La posición 'y' del humano no se invirtió."
+#         assert torch.allclose(h_orig[2], -h_mirr[2]), "❌ FALLO: El ángulo 'sin(na)' del humano no se invirtió."
+#         print("  => OK: Los seres humanos se reflejan correctamente.")
+#     else:
+#         print("\n👥 Datos de Humanos: No hay humanos en este frame de prueba (saltando aserción).")
 
-#         try:
-#             # Instanciamos el dataset. Aquí PyG toma el control:
-#             # - Si el .pt existe: se salta 'process()' y va directo a tu constructor.
-#             # - Si el .pt NO existe: ejecuta 'process()', guarda el archivo y luego construye el objeto.
-#             dataset = SocNavHeteroDataset(
-#                 data_list_file=split_file,
-#                 data_path=DATA_PATH,
-#                 context_path=CONTEXT_PATH,
-#                 timestamp_threshold=0.3
-#             )
-            
-#             # Guardamos la instancia en el diccionario por si necesitas usarla en este script
-#             datasets_en_memoria[nombre_split] = dataset
-            
-#             print(f"✅ ¡Split '{nombre_split}' listo! Total de trayectorias en memoria: {len(dataset)}")
-            
-#             # --- PRUEBA DE INTEGRIDAD DE LOS DATOS ---
-#             # Si el dataset tiene elementos, inspeccionamos el primero para verificar que todo cuadre
-#             if len(dataset) > 0:
-#                 primer_elemento = dataset[0]  # Esto ejecuta tu método get(0)
-#                 trayectoria, label, slength = primer_elemento
-                
-#                 print(f"📊 Verificación del primer elemento:")
-#                 print(f"   • Número de frames en la secuencia: {len(trayectoria)} (slength original: {slength.item()})")
-#                 print(f"   • Tipo de dato del primer frame: {type(trayectoria[0]).__name__}")
-#                 print(f"   • Etiqueta asociada (label): {label.item()}")
-            
-#         except FileNotFoundError as e:
-#             print(f"❌ Error: Comprueba que el archivo de split '{split_file}' exista en '{DATA_PATH}/split/'")
-#             print(f"   Detalle del error: {e}")
-#         except Exception as e:
-#             print(f"❌ Error inesperado procesando el split '{split_file}': {e}")
+#     # 📝 Verificación de Muros / Paredes (Si existen)
+#     # Estructura: [wx, wy, dist_to_robot]
+#     if frame_orig['wall'].x.size(0) > 0:
+#         w_orig = frame_orig['wall'].x[0]
+#         w_mirr = frame_mirr['wall'].x[0]
+#         print("\n🧱 Datos del Muro 0 (Primer Frame):")
+#         print(f"  • Posición Y -> Original: {w_orig[1].item():.4f} | Espejo: {w_mirr[1].item():.4f}")
+        
+#         assert torch.allclose(w_orig[1], -w_mirr[1]), "❌ FALLO: La posición 'y' de la pared no se invirtió."
+#         print("  => OK: Los puntos de los muros se reflejan correctamente.")
+
+#     print("\n🔍 --- TEST 3: Verificación de no-corrupción (Aislamiento de memoria) ---")
+#     # Si modificaste la función para que no use dobles clones ni punteros cruzados,
+#     # el segundo elemento del dataset (índice 1) debe tener el signo cambiado, pero el elemento 0 debe seguir intacto.
+#     assert not torch.allclose(r_orig[1], r_mirr[1]) or r_orig[1] == 0, "❌ FALLO: ¡Los datos originales y espejo son idénticos! Punteros cruzados en memoria."
+#     print("✅ TEST 3 COMPLETADO: Aislamiento de memoria verificado exitosamente.")
 
 #     print(f"\n{'-'*60}")
-#     print("🎯 Proceso de inicialización finalizado.")
-#     print(f"{'-'*60}")
+#     print("🎉 ¡ENHORABUENA! El sistema de Mirroring funciona a la perfección.")
+#     print("Los datos se clonan, aíslan y reflejan respetando las leyes geométricas de SocNav.")
+#     print(f"{'-'*60}\n")

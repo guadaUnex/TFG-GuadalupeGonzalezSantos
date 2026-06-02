@@ -34,6 +34,7 @@ TEST_FILE = config_data["TEST_FILE"]
 ACTIVATION = config_data["ACTIVATION"]
 ADD_CONTEXT_TO_OUTPUT = config_data['ADD_CONTEXT_TO_OUTPUT']
 BATCH_SIZE = config_data["BATCH_SIZE"]
+DATA_AUGMENTATION = config_data["DATA_AUGMENTATION"]
 DROPOUT = config_data["DROPOUT"]
 GNN_CONCAT = config_data["GNN_CONCAT"]
 GNN_HEADS = config_data["GNN_HEADS"]
@@ -75,7 +76,7 @@ def train_model(rnn_data, gnn_data, num_layers,
     os.makedirs(checkpoint_dir, exist_ok=True)
     checkpoint_path = os.path.join(checkpoint_dir, model_name)
 
-    train_dataset = SocNavHeteroDataset(data_list_file = TRAIN_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD, reload = RELOAD)
+    train_dataset = SocNavHeteroDataset(data_list_file = TRAIN_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD, reload = RELOAD, data_augmentation=DATA_AUGMENTATION)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate, drop_last=False)
 
     if ADD_CONTEXT_TO_OUTPUT:
@@ -93,7 +94,7 @@ def train_model(rnn_data, gnn_data, num_layers,
     print("---------------------------------")
 
 
-    val_dataset = SocNavHeteroDataset(data_list_file = DEV_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD, reload=RELOAD)
+    val_dataset = SocNavHeteroDataset(data_list_file = DEV_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD, reload=RELOAD, data_augmentation=DATA_AUGMENTATION)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn = collate, drop_last=True)
 
     model = HybridModel(num_layers, gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
@@ -288,7 +289,8 @@ test_dataset = SocNavHeteroDataset(
     data_path=DATA_PATH, 
     context_path=CONTEXT_FILE, 
     timestamp_threshold=TIMESTAMP_THRESHOLD,
-    reload = RELOAD
+    reload = RELOAD,
+    data_augmentation=DATA_AUGMENTATION
 )
 test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
 
