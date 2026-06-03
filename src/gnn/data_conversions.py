@@ -297,7 +297,6 @@ def tensor_to_sequence(tDict_sequence):
 def clone_sequence(tDict_sequence):
     new_tDict_sequence = {}
 
-
     for k in tDict_sequence:
         if type(tDict_sequence[k]) is torch.Tensor: #not dict:
             new_tDict_sequence[k] = tDict_sequence[k].clone()

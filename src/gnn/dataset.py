@@ -136,7 +136,7 @@ class SocNavHeteroDataset(Dataset):
 
             tensor_dict_to_goal = tensor_transform_to_goal_fr(tensor_dict)
 
-            metrics_sequence = metrics.compute_metrics(tensor_dict_to_goal)
+            metrics_sequence, objects_metrics = metrics.compute_metrics(tensor_dict_to_goal)
 
             normalized_metrics = metrics.normalize_and_cat_features(metrics_sequence, self.max_metric_values, self.all_features)
 
@@ -153,12 +153,12 @@ class SocNavHeteroDataset(Dataset):
             self.labels.append([rating])
             self.slengths.append(lenght)
 
-            # if self.data_augmentation:
-            #     cloned_trajectory = clone_sequence(trayectoria)
-            #     t_data_mirrored = mirror_sequence(cloned_trajectory)
-            #     self.dataset.append(t_data_mirrored)
-            #     self.labels.append([rating])
-            #     self.slengths.append(lenght)
+            if self.data_augmentation:
+                cloned_trajectory = clone_sequence(trayectoria)
+                t_data_mirrored = mirror_sequence(cloned_trajectory)
+                self.dataset.append(t_data_mirrored)
+                self.labels.append([rating])
+                self.slengths.append(lenght)
 
             # count += 1
 

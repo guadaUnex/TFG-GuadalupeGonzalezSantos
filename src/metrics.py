@@ -157,6 +157,7 @@ def get_ttc(cur_frame, prev_frame):
 
 def compute_metrics(tDict_sequence):
     metrics_sequence = {}
+    objects_metrics = {}
 
     robot = tDict_sequence['robot']
     goal = tDict_sequence['goal']
@@ -243,7 +244,12 @@ def compute_metrics(tDict_sequence):
     metrics_sequence['episode_end'] = torch.zeros(dist_to_goal_pos.shape, dtype=torch.float64)
     metrics_sequence['episode_end'][-1] = 1.
 
-    return metrics_sequence
+    objects_metrics['robot'] = robot
+    objects_metrics['people'] = people
+    objects_metrics['objects'] = objects
+    objects_metrics['goal'] = goal
+
+    return metrics_sequence, objects_metrics
 
 def normalize_and_cat_features(metrics_sequence, max_metrics, features):
     metrics_tensor_list = []
