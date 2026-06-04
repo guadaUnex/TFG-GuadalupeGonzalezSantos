@@ -8,7 +8,7 @@ from PIL import Image
 import numpy as np
 import os, io
 
-import metrics
+import gnn.metrics as metrics
 import yaml
 import argparse
 import wandb

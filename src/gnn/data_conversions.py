@@ -11,7 +11,7 @@ import metrics
 def sequence_to_tensor(data, frame_threshold, context):
     sequence = data['sequence']
     last_i = len(sequence)-1
-    robot = {'x':[], 'y':[], 'a':[], 'vx':[], 'vy':[], 'va':[]}
+    robot = {'x':[], 'y':[], 'a':[], 'vx':[], 'vy':[], 'va':[], 'w':[], 'l':[]}
     goal = {'x':[], 'y':[], 'a':[], 'th_p':[], 'th_a':[]}
     people = {'x':[], 'y':[], 'a':[]}
     objects = {'x':[], 'y':[], 'a':[], 'w':[], 'l':[]}
@@ -20,6 +20,7 @@ def sequence_to_tensor(data, frame_threshold, context):
     filtered_sequence = []
     last_timestamp = -float('inf')
     prev_index = 0
+
     for i, frame in enumerate(sequence):
         current_timestamp = frame['timestamp']
         if current_timestamp-last_timestamp >= frame_threshold or i==last_i:
@@ -77,7 +78,8 @@ def sequence_to_tensor(data, frame_threshold, context):
     robot['vx'] = torch.tensor([f['robot_vx'] for f in filtered_sequence]).to(torch.float64)
     robot['vy'] = torch.tensor([f['robot_vy'] for f in filtered_sequence]).to(torch.float64)
     robot['va'] = torch.tensor([f['robot_va'] for f in filtered_sequence]).to(torch.float64)
-    robot['shape'] = filtered_sequence[0]['robot']['shape']
+    robot['w'] = torch.tensor([f['robot']['shape']['width'] for f in filtered_sequence]).to(torch.float64)
+    robot['l'] = torch.tensor([f['robot']['shape']['length'] for f in filtered_sequence]).to(torch.float64)
     robot['dist_travelled'] = torch.tensor([f['dist_travelled'] for f in filtered_sequence]).to(torch.float64)
     goal['x'] = torch.tensor([f['goal']['x'] for f in filtered_sequence]).to(torch.float64)
     goal['y'] = torch.tensor([f['goal']['y'] for f in filtered_sequence]).to(torch.float64)
@@ -203,7 +205,6 @@ def sequence_to_tensor(data, frame_threshold, context):
     for var in context:
         context_ft[var] = torch.tensor([context[var]]).repeat(robot['x'].shape).float().to(torch.float64)
 
-
     tensor_dict = { 'timestamp': timestamp,
                     'indices': indices,
                     'robot': robot,
@@ -213,8 +214,8 @@ def sequence_to_tensor(data, frame_threshold, context):
                     'walls': walls,
                     'metrics': metrics_ft,
                     'context': context_ft}
-   
-    return tensor_dict
+       
+    return tensor_dict, len(filtered_sequence)
 
 def tensor_to_sequence(tDict_sequence):
 	tDict_sequence_copy = clone_sequence(tDict_sequence)
@@ -296,6 +297,9 @@ def tensor_to_sequence(tDict_sequence):
 
 def clone_sequence(tDict_sequence):
     new_tDict_sequence = {}
+
+    if isinstance(tDict_sequence, list):
+        return [graph.clone() for graph in tDict_sequence]
 
     for k in tDict_sequence:
         if type(tDict_sequence[k]) is torch.Tensor: #not dict:

@@ -5,7 +5,7 @@ import sys
 import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__),'../../baseline'))
-import metrics
+import gnn.metrics as metrics
 
     
 def sequence_to_tensor(data, frame_threshold, context):

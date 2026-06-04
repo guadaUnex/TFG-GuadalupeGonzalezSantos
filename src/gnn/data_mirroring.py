@@ -6,16 +6,20 @@ def mirror_sequence(sequence):
     new_sequence = sequence
 
     for frame in new_sequence:
-        frame['robot'].x[:,1] = -frame['robot'].x[:,1]
-        frame['robot'].x[:,2] = -frame['robot'].x[:,2]
-        frame['robot'].x[:,7] = -frame['robot'].x[:,7]
-        frame['robot'].x[:,8] = -frame['robot'].x[:,8]
+        if frame['robot'].x.numel() > 0:
+            frame['robot'].x[:,1] = -frame['robot'].x[:,1]
+            frame['robot'].x[:,2] = -frame['robot'].x[:,2]
+            frame['robot'].x[:,7] = -frame['robot'].x[:,7]
+            frame['robot'].x[:,8] = -frame['robot'].x[:,8]
 
-        frame['human'].x[:,1] = -frame['human'].x[:,1]
-        frame['human'].x[:,2] = -frame['human'].x[:,2]
-        frame['object'].x[:,1] = -frame['object'].x[:,1]
-        frame['object'].x[:,2] = -frame['object'].x[:,2]
-        frame['wall'].x[:,1] = -frame['wall'].x[:,1]
+        if frame['human'].x.numel() > 0:
+            frame['human'].x[:,1] = -frame['human'].x[:,1]
+            frame['human'].x[:,2] = -frame['human'].x[:,2]
+        if frame['object'].x.numel() > 0:
+            frame['object'].x[:,1] = -frame['object'].x[:,1]
+            frame['object'].x[:,2] = -frame['object'].x[:,2]
+        if frame['wall'].x.numel() > 0:
+            frame['wall'].x[:,1] = -frame['wall'].x[:,1]
 
     return new_sequence
 

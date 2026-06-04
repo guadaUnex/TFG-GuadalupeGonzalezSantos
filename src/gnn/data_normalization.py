@@ -28,7 +28,8 @@ def tensor_transform_to_goal_fr(tDict_sequence):
     robot['vx'] = new_vx
     robot['vy'] = new_vy
     robot['va'] = tDict_sequence['robot']['va']
-    robot['shape'] = tDict_sequence['robot']['shape']
+    robot['w'] = tDict_sequence['robot']['w']
+    robot['l'] = tDict_sequence['robot']['l']
     robot['dist_travelled'] = tDict_sequence['robot']['dist_travelled']
 
     if torch.numel(tDict_sequence['people']['exists'])>0:

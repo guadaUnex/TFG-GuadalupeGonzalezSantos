@@ -156,23 +156,23 @@ def get_ttc(cur_frame, prev_frame):
     return calc_metrics
 
 def compute_metrics(tDict_sequence):
-    metrics_sequence = {}
-    objects_metrics = {}
 
     robot = tDict_sequence['robot']
     goal = tDict_sequence['goal']
     people = tDict_sequence['people']
     objects = tDict_sequence['objects']
+    walls = tDict_sequence['walls']
     metrics_ft = tDict_sequence['metrics']
 
     dist_to_goal_pos = torch.sqrt(torch.pow((robot['x']-goal['x']), 2) + torch.pow((robot['y']-goal['y']), 2)) 
     angle_diff = robot['a']-goal['a']
     dist_to_goal_angle = torch.abs(torch.arctan2(torch.sin(angle_diff), torch.cos(angle_diff)))
+
     success = torch.logical_and((dist_to_goal_pos<(goal['th_p'])), (dist_to_goal_angle<goal['th_a']))
-    metrics_sequence['success'] = success.float()
 
     hum_exists = (torch.sum(people['exists'], dim = 1)>0).float()
-    metrics_sequence['hum_exists'] = hum_exists
+    obj_exists = (torch.sum(objects['exists'], dim = 1)>0).float()
+    wall_exists = torch.tensor([torch.numel(walls['x'])>0]).repeat(robot['x'].shape).float().to(torch.float64)
 
     if people['exists'].numel() > 0:
         dist_human = torch.where(people['exists'], metrics_ft['dist_human'], torch.inf)
@@ -181,37 +181,29 @@ def compute_metrics(tDict_sequence):
         dist_human = torch.tensor([torch.inf]).repeat((robot['x'].shape[0],1)).float().to(torch.float64)
         dist_nearest_hum = dist_human.squeeze()
     
-    metrics_sequence['dist_nearest_hum'] = dist_nearest_hum
-
     if objects['exists'].numel() > 0:
         dist_nearest_object = torch.min(torch.where(objects['exists'], metrics_ft['dist_object'], torch.inf), dim = 1).values
     else:
         dist_nearest_object = torch.tensor([torch.inf]).repeat(robot['x'].shape).float().to(torch.float64)
-    metrics_sequence['dist_nearest_obj'] = dist_nearest_object
+
+    inf_tensor = torch.full((wall_exists.shape[0], 1), torch.inf).to(torch.float64)
+    dist_wall = torch.min(torch.cat((metrics_ft['dist_walls'], inf_tensor), dim=1), dim = 1).values
 
     human_collision_flag = (dist_nearest_hum<=0.).float()
-    metrics_sequence['hum_collision_flag'] = human_collision_flag
-
     object_collision_flag = (dist_nearest_object<=0.).float()
-    metrics_sequence['object_collision_flag'] = object_collision_flag
+    wall_collision_flag = (dist_wall<=0.).float()
 
     social_space_intrusionA = (dist_nearest_hum<SOCIAL_SPACE_THRESHOLD).float()
-    metrics_sequence['social_space_intrusionA'] = social_space_intrusionA
     num_near_humansA = torch.sum(dist_human<SOCIAL_SPACE_THRESHOLD, dim = 1).float()
-    metrics_sequence['num_near_humansA'] = num_near_humansA
-    metrics_sequence['num_near_humansA2'] = torch.pow(num_near_humansA, 2)
+    num_near_humansA2 = torch.pow(num_near_humansA, 2)
 
     social_space_intrusionB = (dist_nearest_hum<SOCIAL_SPACE_THRESHOLD*1.5).float()
-    metrics_sequence['social_space_intrusionB'] = social_space_intrusionB
     num_near_humansB = torch.sum(dist_human<SOCIAL_SPACE_THRESHOLD*1.5, dim = 1).float()
-    metrics_sequence['num_near_humansB'] = num_near_humansB
-    metrics_sequence['num_near_humansB2'] = torch.pow(num_near_humansB, 2)
+    num_near_humansB2 = torch.pow(num_near_humansB, 2)
 
     social_space_intrusionC = (dist_nearest_hum<SOCIAL_SPACE_THRESHOLD*2.0).float()
-    metrics_sequence['social_space_intrusionC'] = social_space_intrusionC
     num_near_humansC = torch.sum(dist_human<SOCIAL_SPACE_THRESHOLD*2.0, dim = 1).float()
-    metrics_sequence['num_near_humansC'] = num_near_humansC
-    metrics_sequence['num_near_humansC2'] = torch.pow(num_near_humansC, 2)
+    num_near_humansC2 = torch.pow(num_near_humansC, 2)
 
     if people['exists'].numel() > 0:
         valid_ttc = torch.logical_and(people['exists'], metrics_ft['ttc']>=0.)
@@ -227,39 +219,95 @@ def compute_metrics(tDict_sequence):
         max_panic = torch.zeros(min_ttc.shape, dtype=torch.float64)
         max_fear = torch.zeros(min_ttc.shape, dtype=torch.float64)
 
-    metrics_sequence['min_time_to_collision'] = min_ttc
-    metrics_sequence['min_time_to_collision2'] = torch.pow(min_ttc,2)
-    metrics_sequence['max_fear'] = max_fear
-    metrics_sequence['max_panic'] = max_panic
-
     global_dist_nearest_hum = torch.cummin(dist_nearest_hum, 0).values
-    metrics_sequence['global_dist_nearest_hum'] = global_dist_nearest_hum
 
     acum_dist_travelled = torch.cumsum(robot['dist_travelled'], 0)
     initial_dist_to_goal = torch.tensor([dist_to_goal_pos[0]]).repeat(dist_to_goal_pos.shape).to(torch.float64)
     path_efficiency_ratio = torch.clamp(torch.div(initial_dist_to_goal, acum_dist_travelled), 0., 1.)
-    metrics_sequence['path_efficiency_ratio'] = path_efficiency_ratio
 
-    metrics_sequence['step_ratio'] = tDict_sequence['indices']/tDict_sequence['indices'][-1]
-    metrics_sequence['episode_end'] = torch.zeros(dist_to_goal_pos.shape, dtype=torch.float64)
-    metrics_sequence['episode_end'][-1] = 1.
+    step_ratio = tDict_sequence['indices']/tDict_sequence['indices'][-1]
+    episode_end = torch.zeros(dist_to_goal_pos.shape, dtype=torch.float64)
+    episode_end[-1] = 1.
 
-    objects_metrics['robot'] = robot
-    objects_metrics['people'] = people
-    objects_metrics['objects'] = objects
-    objects_metrics['goal'] = goal
+    cur_time = tDict_sequence['timestamp']
+    prev_time = torch.zeros(cur_time.shape, dtype = torch.float64)
+    prev_time[1:] = cur_time[:-1]
+    prev_time[0] = prev_time[1]-1
+    prev_speed_x = torch.zeros(robot['vx'].shape, dtype = torch.float64)
+    prev_speed_x[1:] = robot['vx'][:-1]
+    prev_speed_x[0] = prev_speed_x[1]
+    prev_speed_y = torch.zeros(robot['vy'].shape, dtype = torch.float64)
+    prev_speed_y[1:] = robot['vy'][:-1]
+    prev_speed_y[0] = prev_speed_y[1]
 
-    return metrics_sequence, objects_metrics
+    diff_time = cur_time-prev_time
+    acceleration_x = (robot['vx']-prev_speed_x)/diff_time
+    acceleration_y = (robot['vy']-prev_speed_y)/diff_time
 
-def normalize_and_cat_features(metrics_sequence, max_metrics, features):
-    metrics_tensor_list = []
+    metrics_dict = {
+        'dist_to_goal_pos': dist_to_goal_pos,
+        'success': success,
+        'hum_exists': hum_exists,
+        'wall_exist': wall_exists,
+        'dist_nearest_hum': dist_nearest_hum,
+        'dist_nearest_object': dist_nearest_object,
+        'dist_wall': dist_wall,
+        'human_collision_flag': human_collision_flag,
+        'object_collision_flag': object_collision_flag,
+        'wall_collision_flag': wall_collision_flag, 
+        'social_space_intrusionA': social_space_intrusionA, 
+        'num_near_humansA': num_near_humansA, 
+        'num_near_humansA2': num_near_humansA2, 
+        'social_space_intrusionB': social_space_intrusionB, 
+        'num_near_humansB': num_near_humansB, 
+        'num_near_humansB2': num_near_humansB2, 
+        'social_space_intrusionC': social_space_intrusionC, 
+        'num_near_humansC': num_near_humansC, 
+        'num_near_humansC2': num_near_humansC2, 
+        'min_ttc': min_ttc, 
+        'min_ttc2': torch.pow(min_ttc, 2), 
+        'max_fear': max_fear, 
+        'max_panic': max_panic, 
+        'global_dist_nearest_hum': global_dist_nearest_hum, 
+        'path_efficiency_ratio': path_efficiency_ratio, 
+        'step_ratio': step_ratio, 
+        'episode_end': episode_end, 
+        'acceleration_x': acceleration_x, 
+        'acceleration_y': acceleration_y
+    }
 
-    for f in metrics_sequence:
-        ft_tensor = metrics_sequence[f]
-        ft_max = max_metrics[f]
-        ft_tensor_norm = torch.clamp(ft_tensor, -ft_max, ft_max)/ft_max
-        metrics_tensor_list.append(torch.unsqueeze(ft_tensor_norm, dim=1))
+    tDict_sequence['computed_metrics'] = metrics_dict
 
-    final_tensor = torch.cat(metrics_tensor_list, dim=1)
+    return tDict_sequence
 
-    return final_tensor
+def normalize_features(tDict_sequence, max_values):
+    for key, value in tDict_sequence.items():
+        if key == 'robot':
+            tDict_sequence['robot']['x'] = value['x']/max_values['scale']
+            tDict_sequence['robot']['y'] = value['y']/max_values['scale']
+            tDict_sequence['robot']['vx'] = value['vx']/max_values['max_v']
+            tDict_sequence['robot']['vy'] = value['vy']/max_values['max_v'] 
+
+        elif key in ['people', 'objects']:
+            if value['x'].numel() == 0 or value['x'].size(1) == 0:
+                tDict_sequence[key]['x'] = value['x']
+                tDict_sequence[key]['y'] = value['y']
+            else:
+                mask = value['exists']
+                tDict_sequence[key]['x'] = torch.where(mask, value['x'] / max_values['scale'], 0.0)
+                tDict_sequence[key]['y'] = torch.where(mask, value['y'] / max_values['scale'], 0.0)
+
+        elif key == 'computed_metrics':
+            for metric_name in tDict_sequence['computed_metrics'].keys():
+                max_val = max_values.get(metric_name)
+                tDict_sequence[key][metric_name] = tDict_sequence['computed_metrics'][metric_name]/max_val  
+
+        elif key == 'walls':
+                tDict_sequence['walls']['x'] = value['x'] / max_values['scale']
+                tDict_sequence['walls']['y'] = value['y'] / max_values['scale'] 
+
+        elif key == 'context':
+            for k in tDict_sequence['context'].keys():
+                tDict_sequence['context'][k] = tDict_sequence['context'][k] / max_values['max_c']
+
+    return tDict_sequence

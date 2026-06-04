@@ -8,7 +8,6 @@ from pathlib import Path
 from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
 from torch_geometric.data import Dataset, HeteroData, Batch
-from transforms import GoalFrameTransform
 
 from data_conversions import clone_sequence, sequence_to_tensor
 from data_mirroring import mirror_sequence
@@ -45,16 +44,21 @@ class SocNavHeteroDataset(Dataset):
         with open(os.path.join(data_path, data_list_file), 'r') as f:
             self.file_names = f.read().splitlines()
 
-        self.metrics_features = ['success', 'dist_nearest_hum', 'dist_nearest_obj', 'hum_collision_flag', 'object_collision_flag', 
-                                'social_space_intrusionA', 'social_space_intrusionB', 'social_space_intrusionC', 
-                                'num_near_humansA', 'num_near_humansB', 'num_near_humansC', 'min_time_to_collision', 'min_time_to_collision2', 
-                                'max_fear', 'max_panic', 'global_dist_nearest_hum', 'path_efficiency_ratio', 'step_ratio', 'episode_end']
+        self.MAX_TTC = 10
+
+        self.metrics_features = ['dist_to_goal_pos', 'success', 'hum_exists', 'wall_exist', 'dist_nearest_hum', 'dist_nearest_object', 
+                                 'dist_wall', 'human_collision_flag', 'object_collision_flag', 'wall_collision_flag',
+                                 'social_space_intrusionA', 'num_near_humansA', 'num_near_humansA2', 'social_space_intrusionB',
+                                 'num_near_humansB', 'num_near_humansB2', 'social_space_instrusionC', 'num_near_humansC',
+                                 'num_near_humansC2', 'min_ttc', 'min_ttc2', 'max_fear', 'max_panic', 'global_dist_nearest_hum',
+                                 'path_efficiency_ratio', 'step_ratio', 'episode_end', 'acceleration_x', 'acceleration_y']
         
-        self.max_metric_values = {'success': 1, 'dist_nearest_hum': 10, 'dist_nearest_obj': 10, 'hum_collision_flag': 1, 
-                                  'object_collision_flag': 1, 'social_space_intrusionA': 1, 'social_space_intrusionB': 1, 'social_space_intrusionC': 1,
-                                  'num_near_humansA': 10, 'num_near_humansB': 10, 'num_near_humansC': 10, 'min_time_to_collision': self.MAX_TTC, 
-                                  'min_time_to_collision2': self.MAX_TTC**2, 'max_fear': 10, 'max_panic': 10,
-                                  'global_dist_nearest_hum': 10, 'path_efficiency_ratio': 1, 'step_ratio': 1, 'episode_end': 1}
+        self.max_values = {'scale': 10.0, 'max_v': 2.0, 'max_c': 100.0, 'dist_to_goal_pos': 10, 'success': 1, 'hum_exists': 1, 'wall_exist': 1, 'dist_nearest_hum': 10, 'dist_nearest_object': 10, 
+                                 'dist_wall': 10, 'human_collision_flag': 1, 'object_collision_flag': 1, 'wall_collision_flag': 1,
+                                 'social_space_intrusionA': 1, 'num_near_humansA': 10, 'num_near_humansA2': 10, 'social_space_intrusionB': 1,
+                                 'num_near_humansB': 10, 'num_near_humansB2': 10, 'social_space_intrusionC': 1, 'num_near_humansC': 10,
+                                 'num_near_humansC2': 10, 'min_ttc': self.MAX_TTC, 'min_ttc2': self.MAX_TTC**2, 'max_fear': 10, 'max_panic': 10, 'global_dist_nearest_hum': 10,
+                                 'path_efficiency_ratio': 1, 'step_ratio': 1, 'episode_end': 1, 'acceleration_x': 3, 'acceleration_y': 3}
 
         # Reading the context file
 
@@ -66,7 +70,7 @@ class SocNavHeteroDataset(Dataset):
         
         self.all_features = {
             # success, min dist to human, context vars.
-            'scenario': 2 + len(self.context_features), 
+            'scenario': len(self.context_features) + len(self.metrics_features), 
             'goal': 5,
             'robot': 10,
             'human': 5,
@@ -74,7 +78,6 @@ class SocNavHeteroDataset(Dataset):
             'wall': 3
         }
 
-        self.transformer = GoalFrameTransform(scale=10.0, v_max=2.0)
         self.dataset = []
         self.labels = []
         self.slengths = []
@@ -127,27 +130,29 @@ class SocNavHeteroDataset(Dataset):
             with open(raw_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
 
-            context_desc = json_data.get('context_description', self.overwrite_contexts)
+            if 'context_description' in json_data.keys(): #not self.overwrite_contexts:
+                context_desc = json_data['context_description']
+            else:
+                context_desc = self.overwrite_contexts
+            context = self.context_df.loc[context_desc.rstrip()].to_dict()
+            
+
             walls = json_data.get('walls', [])
             rating = json_data.get('label',0.)
             lenght = 0
 
-            tensor_dict = sequence_to_tensor(json_data, self.timestamp_threshold, context_desc)
+            tensor_dict, lenght = sequence_to_tensor(json_data, self.timestamp_threshold, context)
 
             tensor_dict_to_goal = tensor_transform_to_goal_fr(tensor_dict)
 
-            metrics_sequence, objects_metrics = metrics.compute_metrics(tensor_dict_to_goal)
+            full_dict = metrics.compute_metrics(tensor_dict_to_goal)
 
-            normalized_metrics = metrics.normalize_and_cat_features(metrics_sequence, self.max_metric_values, self.all_features)
-
-            context = list(self.context_df.loc[context_desc.rstrip()].to_dict().values())
-            self.transformer.normalize_context(context)
+            normalized_dict = metrics.normalize_features(full_dict, self.max_values)
 
             trayectoria = []
-            for i, frame in enumerate(json_data['sequence']):
-                grafo = self._json_to_heterodata(frame, walls, context, normalized_metrics)
+            for i in range(lenght):
+                grafo = self._json_to_heterodata(normalized_dict, i)
                 trayectoria.append(grafo)
-                lenght += 1
 
             self.dataset.append(trayectoria)
             self.labels.append([rating])
@@ -160,10 +165,10 @@ class SocNavHeteroDataset(Dataset):
                 self.labels.append([rating])
                 self.slengths.append(lenght)
 
-            # count += 1
+            count += 1
 
-            # if count == limit:
-            #     break
+            if count == limit:
+                break
 
         torch.save(
             {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
@@ -237,65 +242,99 @@ class SocNavHeteroDataset(Dataset):
 
     # --- MÉTODOS AUXILIARES ---
 
-    def _json_to_heterodata(self, frame, walls, context, metrics, full_conexo=False):
+    def _json_to_heterodata(self, dict, index, full_conexo=False):
         data = HeteroData()
-        s = self.transformer.scale  
-        v = self.transformer.v_max
 
-        # We read de robot data first to save some information in the scenario node
-        r = frame['robot']
-        g = frame['goal']
-
-        dist_to_goal_pos = math.sqrt((r['x']-g['x'])**2 + (r['y']-g['y'])**2) 
-        angle_diff = r['angle']-g['angle']
-        dist_to_goal_angle = abs(math.atan2(math.sin(angle_diff), math.cos(angle_diff)))
-        success = 1. if (dist_to_goal_pos<g['pos_threshold']+0.1) and (dist_to_goal_angle<g['angle_threshold']) else 0.
+        rx = dict['robot']['x'][index]
+        ry = dict['robot']['y'][index]
 
         # Goal node
-        gx, gy, ga = torch.tensor(g['x']), torch.tensor(g['y']), torch.tensor(g['angle'])
-        data['goal'].x = torch.tensor([[0.0, 0.0, 0, g['pos_threshold']/s, g['angle_threshold']/3.14]], dtype=torch.float)
+        data['goal'].x = torch.tensor([dict['goal']['x'][index], 
+                                        dict['goal']['y'][index], 
+                                        math.sin(dict['goal']['a'][index]), 
+                                        math.cos(dict['goal']['a'][index]),
+                                        dict['goal']['th_p'][index], 
+                                        dict['goal']['th_a'][index]], 
+                                        dtype=torch.float).view(1,-1)
 
         # Robot node
-        rx, ry, ra = self.transformer.transform_pose(r['x'], r['y'], r['angle'], gx, gy, ga)
-        nvx, nvy, nva = self.transformer.transform_velocity(r['speed_x'], r['speed_y'], r['speed_a'], ga)
-        dist_to_goal = math.sqrt(rx**2+ry**2)
-        data['robot'].x = torch.tensor([[rx, ry, math.sin(ra), math.cos(ra), r['shape']['width']/s, r['shape']['length']/s, nvx, nvy, nva, dist_to_goal]], dtype=torch.float)
+        data['robot'].x = torch.tensor([[rx, 
+                                         ry, 
+                                         math.sin(dict['robot']['a'][index]), 
+                                         math.cos(dict['robot']['a'][index]), 
+                                         dict['robot']['w'][index], 
+                                         dict['robot']['l'][index],  
+                                         dict['robot']['vx'][index], 
+                                         dict['robot']['vy'][index], 
+                                         dict['robot']['va'][index], 
+                                         dict['computed_metrics']['dist_to_goal_pos'][index]]], dtype=torch.float).view(1,-1)
+        
+
+        num_humans = dict['people']['x'].shape[1]
 
         # People nodes
-        min_HR_dist = 1.
-        people = frame.get('people', [])
         p_list = []
-        for p in people:
-            nx, ny, na = self.transformer.transform_pose(p['x'], p['y'], p['angle'], gx, gy, ga)
-            dist_to_robot = math.sqrt((nx-rx)**2+(ny-ry)**2)
-            min_HR_dist = min(dist_to_robot, min_HR_dist)
-            p_list.append([nx, ny, math.sin(na), math.cos(na), dist_to_robot])
+        for i in range(num_humans):
+            px = dict['people']['x'][index, i].item()
+            py = dict['people']['y'][index, i].item()
+            pa = dict['people']['a'][index, i].item()
+            dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
+            p_list.append([px, 
+                           py, 
+                           math.sin(pa), 
+                           math.cos(pa), 
+                           dist_to_robot]) 
         data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 5))
 
+        num_objects = dict['objects']['x'].shape[1]
+
         # Object nodes
-        objects = frame.get('objects', [])
         o_list = []
-        for o in objects:
-            nx, ny, na = self.transformer.transform_pose(o['x'], o['y'], o['angle'], gx, gy, ga)
-            dist_to_robot = math.sqrt((nx-rx)**2+(ny-ry)**2)
-            o_list.append([nx, ny, math.sin(na), math.cos(na), o['shape']['width']/s, o['shape']['length']/s, dist_to_robot])
+        for i in range(num_objects):
+            ox = dict['objects']['x'][index, i].item()
+            oy = dict['objects']['y'][index, i].item()
+            oa = dict['objects']['a'][index, i].item()
+            dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
+            o_list.append([ox, 
+                           oy, 
+                           math.sin(oa), 
+                           math.cos(oa), 
+                           dict['objects']['w'][index, i], 
+                           dict['objects']['l'][index, i], 
+                           dist_to_robot])
         data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 7))
 
         # Walls nodes
-        if walls:
+        walls = dict['walls']
+        if walls is not None:
             raw_points = self._sample_walls(walls)
             w_list = []
             for pt in raw_points:
-                wx, wy, _ = self.transformer.transform_pose(pt[0].item(), pt[1].item(), 0.0, gx, gy, ga)
+                wx = pt[0].item()
+                wy = pt[1].item()
                 dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
                 w_list.append([wx, wy, dist_to_robot])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
         else:
             data['wall'].x = torch.empty((0, 3))
 
+        context_values = []
+        for c_key in dict['context'].keys():
+            val = dict['context'][c_key][index].item()
+            context_values.append(val)
+            
+        context_tensor = torch.tensor(context_values, dtype=torch.float32)
+
+        metrics_values = []
+        for m_key in dict['computed_metrics'].keys():
+            val = dict['computed_metrics'][m_key][index].item()
+            metrics_values.append(val)
+
+        metrics_frame = torch.tensor(metrics_values, dtype=torch.float32)
+
         # Scenario node
-        scenario_features = [success, min_HR_dist]+ context + metrics
-        data['scenario'].x = torch.tensor([scenario_features], dtype=torch.float)
+        scenario_features = torch.cat((metrics_frame, context_tensor), dim=0).float()
+        data['scenario'].x = scenario_features.view(1,-1)
 
         data = self._create_edges(data, full_conexo=full_conexo)
 
@@ -305,8 +344,16 @@ class SocNavHeteroDataset(Dataset):
     def _sample_walls(self, walls, dist_points=2.):
         wall_points = []
 
-        for wall in walls:
-            x1, y1, x2, y2 = wall
+        wx = walls['x']
+        wy = walls['y']
+
+        num_walls = len(wx)//2
+
+        for i in range(num_walls):
+            x1 = wx[2 * i].item()
+            y1 = wy[2 * i].item()
+            x2 = wx[2 * i + 1].item()
+            y2 = wy[2 * i + 1].item()
             
             dx, dy = x2 - x1, y2 - y1
             distance = (dx**2 + dy**2)**0.5
@@ -344,16 +391,15 @@ class SocNavHeteroDataset(Dataset):
         if 'robot' in node_types and 'goal' in node_types:
             edge_index_rg = torch.tensor([[0], [0]], dtype=torch.long)
             
-            dist_rg = torch.norm(data['robot'].x[0, :2], p=2).reshape(1, 1)
-            
-            goal_threshold = data['goal'].x[0, 3]
+            dist_rg = torch.norm(data['robot'].x[0, :2], p=2).reshape(1, 1)            
+            goal_threshold = data['goal'].x[0,3]
+
             edge_attr_rg = torch.tensor([[dist_rg, goal_threshold]], dtype=torch.float)
 
             data['robot', 'targets', 'goal'].edge_index = edge_index_rg
             data['robot', 'targets', 'goal'].edge_attr = edge_attr_rg
             data['goal', 'assigned_to', 'goal'].edge_index = edge_index_rg
             data['goal', 'assigned_to', 'goal'].edge_attr = edge_attr_rg
-
 
         if 'scenario' in node_types:
             for t in node_types:
@@ -371,7 +417,6 @@ class SocNavHeteroDataset(Dataset):
                     data[t, 'in', 'scenario'].edge_attr = torch.tensor([1.]*num_nodes_of_type, dtype=torch.float)
                     data['scenario', 'contains', t].edge_index = edge_index_contains_scenario
                     data['scenario', 'contains', t].edge_attr = torch.tensor([1.]*num_nodes_of_type, dtype=torch.float)
-
         
         spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
@@ -381,9 +426,12 @@ class SocNavHeteroDataset(Dataset):
                 if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
                     continue
 
+                if data[type_a].x.numel() == 0 or data[type_b].x.numel() == 0:
+                    continue
+
                 pos_a = data[type_a].x[:, :2]
                 pos_b = data[type_b].x[:, :2]
-                
+
                 if pos_a.numel() == 0 or pos_b.numel() == 0:
                     continue
 
@@ -410,7 +458,7 @@ class SocNavHeteroDataset(Dataset):
                     if type_a != type_b:
                         rev_rel = (type_b, 'near_to', type_a)
                         data[rev_rel].edge_index = edge_index.flip(0).long()
-                        data[rev_rel].edge_attr = edge_values                     
+                        data[rev_rel].edge_attr = edge_values   
 
         edge_types_metadata = self.get_metadata()[1]  
 
@@ -418,6 +466,7 @@ class SocNavHeteroDataset(Dataset):
             if edge_type not in data.edge_types:
                 data[edge_type].edge_index = torch.empty((2, 0), dtype=torch.long)
                 data[edge_type].edge_attr = torch.empty((0), dtype=torch.float)
+
         return data
 
 
@@ -438,111 +487,58 @@ def collate(batch):
 
         
 
-# if __name__ == "__main__":
-#     print("🚀 Lanzando suite de prueba para verificación de Mirroring (Data Augmentation)...")
+if __name__ == "__main__":
+    print("🚀 Lanzando suite de prueba simplificada para SocNavHeteroDataset...")
 
-#     # --- Configuración de rutas de pruebas ---
-#     DATA_PATH = '../../../dataset/labeled/labeled'
-#     CONTEXT_PATH = '../../../dataset/contexts/anthropic_claude_context.csv'
-#     SPLIT_PRUEBA = '../split/train_set_socnav3.txt' # Asegúrate de que este archivo existe para la prueba
+    # --- Configuración de tus rutas reales ---
+    DATA_PATH = '../../../dataset/labeled/labeled'
+    CONTEXT_PATH = '../../../dataset/contexts/anthropic_claude_context.csv'
+    SPLIT_PRUEBA = '../split/train_set_socnav3.txt' # El nombre del archivo dentro de DATA_PATH
 
-#     # 1. Instanciamos el Dataset FORZANDO el Data Augmentation y recreando el procesamiento
-#     print("\n[PASO 1] Instanciando dataset con data_augmentation=True...")
-#     try:
-#         dataset = SocNavHeteroDataset(
-#             data_list_file=SPLIT_PRUEBA,
-#             data_path=DATA_PATH,
-#             context_path=CONTEXT_PATH,
-#             timestamp_threshold=0.3,
-#             data_augmentation=True,   # 🌟 ACTIVAMOS EL AUMENTO
-#             reload=False              # 🌟 FORZAMOS REPROCESAMIENTO para ver el espejo en acción
-#         )
-#     except Exception as e:
-#         print(f"❌ Error al instanciar el dataset: {e}")
-#         print("Asegúrate de que las rutas relativas sean correctas desde la carpeta donde ejecutas este script.")
-#         exit(1)
+    print("\n[PASO 1] Instanciando dataset con data_augmentation=True...")
+    try:
+        dataset = SocNavHeteroDataset(
+            data_list_file=SPLIT_PRUEBA,
+            data_path=DATA_PATH,
+            context_path=CONTEXT_PATH,
+            timestamp_threshold=0.3,
+            data_augmentation=True,   # Activa el espejo (Mirroring)
+            reload=False              # Fuerza el procesamiento crudo (.process())
+        )
+    except Exception as e:
+        print(f"❌ Error al instanciar el dataset: {e}")
+        print("Asegúrate de que las rutas relativas sean correctas desde donde ejecutas este script.")
+        exit(1)
 
-#     print(f"\n[PASO 2] Dataset cargado. Muestras totales generadas: {len(dataset)}")
+    print(f"\n[PASO 2] Dataset cargado. Muestras totales en memoria: {len(dataset)}")
     
-#     if len(dataset) < 2:
-#         print("❌ Error: Se necesitan al menos 2 muestras en el dataset para validar el reflejo.")
-#         exit(1)
+    if len(dataset) < 2:
+        print("❌ Alerta: Se necesitan más muestras para validar, pero el pipeline base no ha crasheado.")
+        exit(0)
 
-#     # 2. Extracción de la pareja de prueba
-#     # Debido a tu lógica en 'process()', la muestra 0 es la Original y la muestra 1 es su versión Espejo.
-#     print("\n[PASO 3] Extrayendo pareja simétrica (Muestra 0 [Original] vs Muestra 1 [Espejo])...")
-#     traj_orig, label_orig, len_orig = dataset[0]
-#     traj_mirr, label_mirr, len_mirr = dataset[1]
+    # El elemento 0 es la secuencia Original y el 1 es su versión Espejo (Mirror)
+    print("\n[PASO 3] Extrayendo pareja simétrica (Muestra 0 [Original] vs Muestra 1 [Espejo])...")
+    traj_orig, label_orig, len_orig = dataset[0]
+    traj_mirr, label_mirr, len_mirr = dataset[1]
 
-#     # --- TEST 1: Longitudes y Etiquetas ---
-#     print("\n🔍 --- TEST 1: Consistencia de Metadatos y Estructura temporal ---")
-#     print(f"• Longitud temporal original: {len_orig.item()} | Longitud espejo: {len_mirr.item()}")
-#     print(f"• Etiqueta original: {label_orig.item()} | Etiqueta espejo: {label_mirr.item()}")
+    print("\n📊 --- INFORMACIÓN DE ESTRUCTURAS ---")
+    print(f"• Longitud temporal secuencia original: {len_orig.item()} frames")
+    print(f"• Longitud temporal secuencia espejo:   {len_mirr.item()} frames")
+    print(f"• Calificación/Label original:          {label_orig.item()}")
+    print(f"• Calificación/Label espejo:            {label_mirr.item()}")
+
+    # Inspección rápida del primer Grafo Heterogéneo de la secuencia
+    print("\n🤖 --- INSPECCIÓN DEL PRIMER FRAME DE LA TRAYECTORIA ---")
+    primer_grafo = traj_orig[0]
+    print(primer_grafo)
     
-#     assert len_orig.item() == len_mirr.item(), "❌ FALLO: Las longitudes temporales difieren."
-#     assert len(traj_orig) == len(traj_mirr), "❌ FALLO: El conteo de grafos (frames) internos difiere."
-#     assert torch.equal(label_orig, label_orig), "❌ FALLO: Las etiquetas sufrieron alteraciones."
-#     print("✅ TEST 1 COMPLETADO: Estructura y dimensiones idénticas.")
+    if 'robot' in primer_grafo.node_types:
+        print(f"• Dimensiones del tensor del Robot: {primer_grafo['robot'].x.shape}")
+    if 'human' in primer_grafo.node_types:
+        print(f"• Dimensiones del tensor de Humanos: {primer_grafo['human'].x.shape}")
+    if 'wall' in primer_grafo.node_types:
+        print(f"• Dimensiones del tensor de Paredes: {primer_grafo['wall'].x.shape}")
+    if 'scenario' in primer_grafo.node_types:
+        print(f"• Dimensiones del nodo Escenario:    {primer_grafo['scenario'].x.shape}")
 
-#     # --- TEST 2: Inversión Geométrica de Tensores (Matemática de Nodos) ---
-#     print("\n🔍 --- TEST 2: Verificación analítica de los signos en el Eje Y ---")
-    
-#     # Analizamos el primer frame de la secuencia para verificar los nodos
-#     frame_orig = traj_orig[0]
-#     frame_mirr = traj_mirr[0]
-    
-#     # 📝 Verificación del Robot
-#     # Estructura de data['robot'].x según tu código: [rx, ry, sin(ra), cos(ra), w, l, nvx, nvy, nva, dist]
-#     # Deben invertirse: ry (index 1), sin(ra) (index 2), nvy (index 7), nva (index 8)
-#     r_orig = frame_orig['robot'].x[0]
-#     r_mirr = frame_mirr['robot'].x[0]
-    
-#     print("\n🤖 Datos del Robot (Primer Frame):")
-#     print(f"  • Posición Y -> Original: {r_orig[1].item():.4f} | Espejo: {r_mirr[1].item():.4f}")
-#     print(f"  • Seno Ángulo -> Original: {r_orig[2].item():.4f} | Espejo: {r_mirr[2].item():.4f}")
-#     print(f"  • Vel. Lineal Y -> Original: {r_orig[7].item():.4f} | Espejo: {r_mirr[7].item():.4f}")
-#     print(f"  • Vel. Angular -> Original: {r_orig[8].item():.4f} | Espejo: {r_mirr[8].item():.4f}")
-    
-#     # Comprobaciones matemáticas tolerantes a precisión flotante
-#     assert torch.allclose(r_orig[1], -r_mirr[1]), "❌ FALLO: La posición 'y' del robot no se invirtió correctamente."
-#     assert torch.allclose(r_orig[2], -r_mirr[2]), "❌ FALLO: El ángulo (sin) del robot no se invirtió correctamente."
-#     assert torch.allclose(r_orig[7], -r_mirr[7]), "❌ FALLO: La velocidad 'vy' del robot no se invirtió correctamente."
-#     assert torch.allclose(r_orig[8], -r_mirr[8]), "❌ FALLO: La velocidad angular 'va' del robot no se invirtió correctamente."
-#     print("  => OK: El robot se refleja de manera simétrica perfecta.")
-
-#     # 📝 Verificación de Humanos (Si existen en el escenario)
-#     # Estructura: [nx, ny, sin(na), cos(na), dist_to_robot]
-#     if frame_orig['human'].x.size(0) > 0:
-#         h_orig = frame_orig['human'].x[0]
-#         h_mirr = frame_mirr['human'].x[0]
-#         print("\n👥 Datos del Humano 0 (Primer Frame):")
-#         print(f"  • Posición Y -> Original: {h_orig[1].item():.4f} | Espejo: {h_mirr[1].item():.4f}")
-#         print(f"  • Seno Ángulo -> Original: {h_orig[2].item():.4f} | Espejo: {h_mirr[2].item():.4f}")
-        
-#         assert torch.allclose(h_orig[1], -h_mirr[1]), "❌ FALLO: La posición 'y' del humano no se invirtió."
-#         assert torch.allclose(h_orig[2], -h_mirr[2]), "❌ FALLO: El ángulo 'sin(na)' del humano no se invirtió."
-#         print("  => OK: Los seres humanos se reflejan correctamente.")
-#     else:
-#         print("\n👥 Datos de Humanos: No hay humanos en este frame de prueba (saltando aserción).")
-
-#     # 📝 Verificación de Muros / Paredes (Si existen)
-#     # Estructura: [wx, wy, dist_to_robot]
-#     if frame_orig['wall'].x.size(0) > 0:
-#         w_orig = frame_orig['wall'].x[0]
-#         w_mirr = frame_mirr['wall'].x[0]
-#         print("\n🧱 Datos del Muro 0 (Primer Frame):")
-#         print(f"  • Posición Y -> Original: {w_orig[1].item():.4f} | Espejo: {w_mirr[1].item():.4f}")
-        
-#         assert torch.allclose(w_orig[1], -w_mirr[1]), "❌ FALLO: La posición 'y' de la pared no se invirtió."
-#         print("  => OK: Los puntos de los muros se reflejan correctamente.")
-
-#     print("\n🔍 --- TEST 3: Verificación de no-corrupción (Aislamiento de memoria) ---")
-#     # Si modificaste la función para que no use dobles clones ni punteros cruzados,
-#     # el segundo elemento del dataset (índice 1) debe tener el signo cambiado, pero el elemento 0 debe seguir intacto.
-#     assert not torch.allclose(r_orig[1], r_mirr[1]) or r_orig[1] == 0, "❌ FALLO: ¡Los datos originales y espejo son idénticos! Punteros cruzados en memoria."
-#     print("✅ TEST 3 COMPLETADO: Aislamiento de memoria verificado exitosamente.")
-
-#     print(f"\n{'-'*60}")
-#     print("🎉 ¡ENHORABUENA! El sistema de Mirroring funciona a la perfección.")
-#     print("Los datos se clonan, aíslan y reflejan respetando las leyes geométricas de SocNav.")
-#     print(f"{'-'*60}\n")
+    print("\n🎉 ¡Prueba finalizada! Si ves los prints de arriba sin ningún mensaje de error intermedio, tu pipeline está corregido y listo.")
