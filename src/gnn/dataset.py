@@ -51,14 +51,16 @@ class SocNavHeteroDataset(Dataset):
                                  'social_space_intrusionA', 'num_near_humansA', 'num_near_humansA2', 'social_space_intrusionB',
                                  'num_near_humansB', 'num_near_humansB2', 'social_space_instrusionC', 'num_near_humansC',
                                  'num_near_humansC2', 'min_ttc', 'min_ttc2', 'max_fear', 'max_panic', 'global_dist_nearest_hum',
-                                 'path_efficiency_ratio', 'step_ratio', 'episode_end', 'acceleration_x', 'acceleration_y']
+                                 'path_efficiency_ratio', 'step_ratio', 'episode_end']
         
-        self.max_values = {'scale': 10.0, 'max_v': 2.0, 'max_c': 100.0, 'dist_to_goal_pos': 10, 'success': 1, 'hum_exists': 1, 'wall_exist': 1, 'dist_nearest_hum': 10, 'dist_nearest_object': 10, 
+        self.max_values = {'scale': 10.0, 'max_v': 2.0, 'max_va': np.pi, 'max_acc' : 3.0, 'max_c': 100.0, 'dist_to_goal_pos': 10, 'success': 1, 'hum_exists': 1, 'wall_exist': 1, 'dist_nearest_hum': 10, 'dist_nearest_object': 10, 
                                  'dist_wall': 10, 'human_collision_flag': 1, 'object_collision_flag': 1, 'wall_collision_flag': 1,
                                  'social_space_intrusionA': 1, 'num_near_humansA': 10, 'num_near_humansA2': 10, 'social_space_intrusionB': 1,
                                  'num_near_humansB': 10, 'num_near_humansB2': 10, 'social_space_intrusionC': 1, 'num_near_humansC': 10,
                                  'num_near_humansC2': 10, 'min_ttc': self.MAX_TTC, 'min_ttc2': self.MAX_TTC**2, 'max_fear': 10, 'max_panic': 10, 'global_dist_nearest_hum': 10,
-                                 'path_efficiency_ratio': 1, 'step_ratio': 1, 'episode_end': 1, 'acceleration_x': 3, 'acceleration_y': 3}
+                                 'path_efficiency_ratio': 1, 'step_ratio': 1, 'episode_end': 1}
+        
+        #, 'acceleration_x': 3, 'acceleration_y': 3
 
         # Reading the context file
 
@@ -72,7 +74,7 @@ class SocNavHeteroDataset(Dataset):
             # success, min dist to human, context vars.
             'scenario': len(self.context_features) + len(self.metrics_features), 
             'goal': 5,
-            'robot': 10,
+            'robot': 12,
             'human': 5,
             'object': 7,
             'wall': 3
@@ -121,7 +123,7 @@ class SocNavHeteroDataset(Dataset):
     def process(self):
         print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
-        limit = 25
+        limit = 5
         count = 0
 
         # print(self.raw_paths)
@@ -170,10 +172,10 @@ class SocNavHeteroDataset(Dataset):
             if count == limit:
                 break
 
-        torch.save(
-            {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
-            self.processed_paths[0]
-        )
+        # torch.save(
+        #     {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
+        #     self.processed_paths[0]
+        # )
 
 
     def get_metadata(self):
@@ -198,12 +200,12 @@ class SocNavHeteroDataset(Dataset):
                 ('scenario', 'contains', 'human'), 
                 ('scenario', 'contains', 'object'), 
                 ('scenario', 'contains', 'wall'), 
-                ('goal', 'near_to', 'human'), 
-                ('human', 'near_to', 'goal'), 
-                ('goal', 'near_to', 'object'), 
-                ('object', 'near_to', 'goal'), 
-                ('goal', 'near_to', 'wall'), 
-                ('wall', 'near_to', 'goal'), 
+                # ('goal', 'near_to', 'human'), 
+                # ('human', 'near_to', 'goal'), 
+                # ('goal', 'near_to', 'object'), 
+                # ('object', 'near_to', 'goal'), 
+                # ('goal', 'near_to', 'wall'), 
+                # ('wall', 'near_to', 'goal'), 
                 ('goal', 'near_to', 'robot'), 
                 ('robot', 'near_to', 'goal'), 
                 ('robot', 'near_to', 'wall'), 
@@ -212,14 +214,14 @@ class SocNavHeteroDataset(Dataset):
                 ('human', 'near_to', 'robot'), 
                 ('robot', 'near_to', 'object'), 
                 ('object', 'near_to', 'robot'), 
-                ('human', 'near_to', 'human'), 
-                ('human', 'near_to', 'object'), 
-                ('object', 'near_to', 'human'), 
-                ('human', 'near_to', 'wall'), 
-                ('wall', 'near_to', 'human'), 
-                ('object', 'near_to', 'object'),
-                ('object', 'near_to', 'wall'),
-                ('wall', 'near_to', 'object')                
+                # ('human', 'near_to', 'human'), 
+                # ('human', 'near_to', 'object'), 
+                # ('object', 'near_to', 'human'), 
+                # ('human', 'near_to', 'wall'), 
+                # ('wall', 'near_to', 'human'), 
+                # ('object', 'near_to', 'object'),
+                # ('object', 'near_to', 'wall'),
+                # ('wall', 'near_to', 'object')                
             ]
         )
         return metadata
@@ -267,40 +269,44 @@ class SocNavHeteroDataset(Dataset):
                                          dict['robot']['vx'][index], 
                                          dict['robot']['vy'][index], 
                                          dict['robot']['va'][index], 
+                                         dict['robot']['acc_x'][index], 
+                                         dict['robot']['acc_y'][index], 
                                          dict['computed_metrics']['dist_to_goal_pos'][index]]], dtype=torch.float).view(1,-1)
         
 
         num_humans = dict['people']['x'].shape[1]
-
+        people_exist = dict['people']['exists']
         # People nodes
         p_list = []
         for i in range(num_humans):
-            px = dict['people']['x'][index, i].item()
-            py = dict['people']['y'][index, i].item()
-            pa = dict['people']['a'][index, i].item()
-            dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
-            p_list.append([px, 
-                           py, 
-                           math.sin(pa), 
-                           math.cos(pa), 
-                           dist_to_robot]) 
+            if people_exist[index, i].item():
+                px = dict['people']['x'][index, i].item()
+                py = dict['people']['y'][index, i].item()
+                pa = dict['people']['a'][index, i].item()
+                dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
+                p_list.append([px, 
+                            py, 
+                            math.sin(pa), 
+                            math.cos(pa), 
+                            dist_to_robot]) 
         data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 5))
 
         num_objects = dict['objects']['x'].shape[1]
-
+        objects_exist = dict['objects']['exists']
         # Object nodes
         o_list = []
         for i in range(num_objects):
-            ox = dict['objects']['x'][index, i].item()
-            oy = dict['objects']['y'][index, i].item()
-            oa = dict['objects']['a'][index, i].item()
-            dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
-            o_list.append([ox, 
-                           oy, 
-                           math.sin(oa), 
-                           math.cos(oa), 
-                           dict['objects']['w'][index, i], 
-                           dict['objects']['l'][index, i], 
+            if objects_exist[index, i].item():
+                ox = dict['objects']['x'][index, i].item()
+                oy = dict['objects']['y'][index, i].item()
+                oa = dict['objects']['a'][index, i].item()
+                dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
+                o_list.append([ox, 
+                            oy, 
+                            math.sin(oa), 
+                            math.cos(oa), 
+                            dict['objects']['w'][index, i], 
+                            dict['objects']['l'][index, i], 
                            dist_to_robot])
         data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 7))
 
@@ -375,7 +381,7 @@ class SocNavHeteroDataset(Dataset):
         
         return unique_points
 
-    def _create_edges(self, data, full_conexo=False, dist_threshold=0.1):
+    def _create_edges(self, data, full_conexo=False, dist_threshold=0.2):
         
         node_types = data.node_types
 
@@ -421,6 +427,8 @@ class SocNavHeteroDataset(Dataset):
         spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
         for i, type_a in enumerate(spatial_nodes):
+            if type_a!='robot':
+                continue
             for type_b in spatial_nodes[i:]:
 
                 if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':

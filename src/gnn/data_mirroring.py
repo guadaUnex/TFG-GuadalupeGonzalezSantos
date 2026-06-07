@@ -7,10 +7,11 @@ def mirror_sequence(sequence):
 
     for frame in new_sequence:
         if frame['robot'].x.numel() > 0:
-            frame['robot'].x[:,1] = -frame['robot'].x[:,1]
-            frame['robot'].x[:,2] = -frame['robot'].x[:,2]
-            frame['robot'].x[:,7] = -frame['robot'].x[:,7]
-            frame['robot'].x[:,8] = -frame['robot'].x[:,8]
+            frame['robot'].x[:,1] = -frame['robot'].x[:,1] #y
+            frame['robot'].x[:,2] = -frame['robot'].x[:,2] #sin(a)
+            frame['robot'].x[:,7] = -frame['robot'].x[:,7] #vy
+            frame['robot'].x[:,8] = -frame['robot'].x[:,8] #va
+            frame['robot'].x[:,10] = -frame['robot'].x[:,10] #acc_y
 
         if frame['human'].x.numel() > 0:
             frame['human'].x[:,1] = -frame['human'].x[:,1]

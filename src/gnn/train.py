@@ -1,7 +1,6 @@
 import argparse
 import os, io
 import torch
-import wandb
 import yaml
 
 import matplotlib.pyplot as plt
@@ -10,6 +9,7 @@ import torch.optim as optim
 
 from PIL import Image
 from torch.utils.data import DataLoader
+import numpy as np
 
 from dataset import SocNavHeteroDataset, collate
 from model import HybridModel
@@ -51,6 +51,8 @@ TIMESTAMP_THRESHOLD = config_data["TIMESTAMP_THRESHOLD"]
 
 SAVE_PLOTS_LOCALLY = config_data["SAVE_PLOTS_LOCALLY"]
 UPLOAD_TO_WANDB = config_data["UPLOAD_TO_WANDB"]
+PROJECT_NAME = config_data["PROJECT_NAME"]
+SEED = config_data["SEED"]
 
 qual_loaders = {}
 Q_TEST_PATH = config_data["Q_TEST_PATH"]
@@ -67,6 +69,26 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device:", device)
 
 SAVE_NAME = '_'.join(['GNN', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR)])
+
+torch.manual_seed(SEED)
+np.random.seed(SEED)
+if UPLOAD_TO_WANDB is True:
+    import wandb
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project=PROJECT_NAME,
+        # Track hyperparameters and run metadata
+        config={
+        "learning_rate": LR,
+        "name": SAVE_NAME,
+        "epochs": MAX_EPOCHS,
+        "seed": SEED,
+        })
+    wandb.save(args.task, policy="now")
+
+SAVE_NAME = SAVE_NAME if UPLOAD_TO_WANDB is False else wandb.run.name
+
 
 def train_model(rnn_data, gnn_data, num_layers, 
                 batch_size=32, num_epochs=1000, patience =50, learning_rate=0.00005, 

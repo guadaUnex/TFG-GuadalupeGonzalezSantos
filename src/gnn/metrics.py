@@ -244,6 +244,9 @@ def compute_metrics(tDict_sequence):
     acceleration_x = (robot['vx']-prev_speed_x)/diff_time
     acceleration_y = (robot['vy']-prev_speed_y)/diff_time
 
+    tDict_sequence['robot']['acc_x'] = acceleration_x
+    tDict_sequence['robot']['acc_y'] = acceleration_y
+
     metrics_dict = {
         'dist_to_goal_pos': dist_to_goal_pos,
         'success': success,
@@ -272,8 +275,8 @@ def compute_metrics(tDict_sequence):
         'path_efficiency_ratio': path_efficiency_ratio, 
         'step_ratio': step_ratio, 
         'episode_end': episode_end, 
-        'acceleration_x': acceleration_x, 
-        'acceleration_y': acceleration_y
+        # 'acceleration_x': acceleration_x, 
+        # 'acceleration_y': acceleration_y
     }
 
     tDict_sequence['computed_metrics'] = metrics_dict
@@ -285,22 +288,38 @@ def normalize_features(tDict_sequence, max_values):
         if key == 'robot':
             tDict_sequence['robot']['x'] = value['x']/max_values['scale']
             tDict_sequence['robot']['y'] = value['y']/max_values['scale']
+            tDict_sequence['robot']['w'] = value['w']/max_values['scale']
+            tDict_sequence['robot']['l'] = value['l']/max_values['scale']
             tDict_sequence['robot']['vx'] = value['vx']/max_values['max_v']
             tDict_sequence['robot']['vy'] = value['vy']/max_values['max_v'] 
+            tDict_sequence['robot']['va'] = value['vy']/max_values['max_va'] 
+            tDict_sequence['robot']['acc_x'] = value['acc_x']/max_values['max_acc']
+            tDict_sequence['robot']['acc_y'] = value['acc_y']/max_values['max_acc'] 
+        
+        elif key == 'goal':
+            tDict_sequence['goal']['th_p'] = value['th_p']/max_values['scale']
+            tDict_sequence['goal']['th_a'] = value['th_a']/max_values['max_va']
 
         elif key in ['people', 'objects']:
             if value['x'].numel() == 0 or value['x'].size(1) == 0:
                 tDict_sequence[key]['x'] = value['x']
                 tDict_sequence[key]['y'] = value['y']
+                if key == 'objects':
+                    tDict_sequence[key]['w'] = value['w']
+                    tDict_sequence[key]['l'] = value['l']
             else:
                 mask = value['exists']
                 tDict_sequence[key]['x'] = torch.where(mask, value['x'] / max_values['scale'], 0.0)
                 tDict_sequence[key]['y'] = torch.where(mask, value['y'] / max_values['scale'], 0.0)
+                if key == 'objects':
+                    tDict_sequence[key]['w'] = torch.where(mask, value['w'] / max_values['scale'], 0.0)
+                    tDict_sequence[key]['l'] = torch.where(mask, value['l'] / max_values['scale'], 0.0)
+
 
         elif key == 'computed_metrics':
             for metric_name in tDict_sequence['computed_metrics'].keys():
                 max_val = max_values.get(metric_name)
-                tDict_sequence[key][metric_name] = tDict_sequence['computed_metrics'][metric_name]/max_val  
+                tDict_sequence[key][metric_name] = torch.clamp(tDict_sequence['computed_metrics'][metric_name], -max_val, max_val)/max_val  
 
         elif key == 'walls':
                 tDict_sequence['walls']['x'] = value['x'] / max_values['scale']
