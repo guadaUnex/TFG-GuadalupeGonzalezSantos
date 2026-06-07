@@ -63,8 +63,8 @@ class HybridModel(nn.Module):
         print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
 
-        print(self.gnn_block)
-        exit()
+        # print(self.gnn_block)
+        # exit()
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
 
