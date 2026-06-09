@@ -124,7 +124,7 @@ for i_d, d in enumerate(FILES):
     q_indices = {}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(d)
-        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, overwrite_contexts=context, timestamp_threshold = FRAME_THRESHOLD, reload=True)
+        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, overwrite_contexts=context, timestamp_threshold = FRAME_THRESHOLD, reload=False)
         all_features = qual_set.get_all_features()
         qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 

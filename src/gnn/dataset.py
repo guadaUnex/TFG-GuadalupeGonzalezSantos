@@ -157,20 +157,20 @@ class SocNavHeteroDataset(Dataset):
                 trayectoria.append(grafo)
 
             self.dataset.append(trayectoria)
-            self.labels.append([rating])
-            self.slengths.append(lenght)
+            self.labels.append(torch.tensor([rating], dtype=torch.float32))
+            self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
             if self.data_augmentation:
                 cloned_trajectory = clone_sequence(trayectoria)
                 t_data_mirrored = mirror_sequence(cloned_trajectory)
                 self.dataset.append(t_data_mirrored)
-                self.labels.append([rating])
-                self.slengths.append(lenght)
+                self.labels.append(torch.tensor([rating], dtype=torch.float32))
+                self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
-            count += 1
+            # count += 1
 
-            if count == limit:
-                break
+            # if count == limit:
+            #     break
 
         # torch.save(
         #     {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
@@ -232,13 +232,16 @@ class SocNavHeteroDataset(Dataset):
     def get_context_features(self):
         return self.context_features
 
+    def get_metrics_features(self):
+        return self.metrics_features
+
     def len(self):
         return len(self.dataset)
 
     def get(self, idx):
         data = self.dataset[idx]
-        label = torch.tensor(self.labels[idx], dtype=torch.float32)
-        slength = torch.tensor(self.slengths[idx], dtype=torch.long)
+        label = self.labels[idx] 
+        slength = self.slengths[idx] 
 
         return data, label, slength
 

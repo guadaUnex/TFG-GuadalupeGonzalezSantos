@@ -105,6 +105,8 @@ def train_model(rnn_data, gnn_data, num_layers,
         context_features = len(train_dataset.get_context_features())
     else:
         context_features = 0
+    
+    metrics_features = len(train_dataset.get_metrics_features())
 
     # print(train_dataset.labels)
     # ----------------------------------------
@@ -117,12 +119,12 @@ def train_model(rnn_data, gnn_data, num_layers,
 
 
     val_dataset = SocNavHeteroDataset(data_list_file = DEV_FILE, data_path = DATA_PATH, context_path = CONTEXT_FILE, timestamp_threshold = TIMESTAMP_THRESHOLD, reload=RELOAD, data_augmentation=DATA_AUGMENTATION)
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn = collate, drop_last=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, collate_fn = collate)
 
     model = HybridModel(num_layers, gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
                         gnn_hidden_channels= gnn_data['hidden_channels'], rnn_type = rnn_data['type'], num_edges = gnn_data['num_edges'],
                         gnn_heads = gnn_data['heads'], gnn_concat = gnn_data['concat'], gnn_metadata= gnn_data['metadata'], linear_layers = LINEAR_LAYERS, 
-                        rnn_activation = ACTIVATION, context_vars = context_features, rnn_dropout = DROPOUT)
+                        rnn_activation = ACTIVATION, context_vars = context_features, metrics_vars = metrics_features, rnn_dropout = DROPOUT)
     model = model.to(device)
     if LOSS == "mse":
         criterion = nn.MSELoss().to(device)
@@ -314,7 +316,7 @@ test_dataset = SocNavHeteroDataset(
     reload = RELOAD,
     data_augmentation=DATA_AUGMENTATION
 )
-test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=True)
+test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, drop_last=False)
 
 sample_graph = test_dataset[0][0][0]  
 
@@ -345,7 +347,7 @@ def get_qual_loader(file_path):
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(f"Creating q_test for: {context}")
         qual_set = SocNavHeteroDataset(data_list_file = file_path, data_path = Q_TEST_PATH, context_path = CONTEXT_FILE, overwrite_contexts=context, timestamp_threshold = TIMESTAMP_THRESHOLD)
-        qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, drop_last=True)
+        qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate, drop_last=False)
         q_loaders.append((context, files, qual_loader, abbreviated_context))
     return q_loaders
 # Load and process test datasets

@@ -292,13 +292,13 @@ def normalize_features(tDict_sequence, max_values):
             tDict_sequence['robot']['l'] = value['l']/max_values['scale']
             tDict_sequence['robot']['vx'] = value['vx']/max_values['max_v']
             tDict_sequence['robot']['vy'] = value['vy']/max_values['max_v'] 
-            tDict_sequence['robot']['va'] = value['vy']/max_values['max_va'] 
+            tDict_sequence['robot']['va'] = value['va']/max_values['max_va'] 
             tDict_sequence['robot']['acc_x'] = value['acc_x']/max_values['max_acc']
             tDict_sequence['robot']['acc_y'] = value['acc_y']/max_values['max_acc'] 
         
         elif key == 'goal':
             tDict_sequence['goal']['th_p'] = value['th_p']/max_values['scale']
-            tDict_sequence['goal']['th_a'] = value['th_a']/max_values['max_va']
+            tDict_sequence['goal']['th_a'] = value['th_a']/(2*max_values['max_va'])
 
         elif key in ['people', 'objects']:
             if value['x'].numel() == 0 or value['x'].size(1) == 0:

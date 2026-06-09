@@ -46,13 +46,17 @@ class GNNModel(nn.Module):
 
 class HybridModel(nn.Module):
     def __init__(self, num_layers, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, num_edges, gnn_heads, gnn_concat, gnn_metadata, 
-                 linear_layers=[], rnn_activation = 'linear', context_vars = 0, rnn_dropout = 0.0):
+                 linear_layers=[], rnn_activation = 'linear', context_vars = 0, metrics_vars = 0, rnn_dropout = 0.0):
         super(HybridModel,self).__init__()
 
         self.gnn_output = gnn_output
         self.num_edges = num_edges
         self.num_layers = num_layers
         self.context_vars = context_vars
+        self.metrics_vars = metrics_vars
+        self.scenario_vars = 0
+        # if self.metrics_vars>0:
+        #     self.scenario_vars = context_vars+metrics_vars
 
         # self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
         # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
@@ -91,9 +95,10 @@ class HybridModel(nn.Module):
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
         if rnn_type == "GRU":
-            self.rnn_layer = nn.GRU(self.gnn_output, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            # self.rnn_layer = nn.GRU(self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            self.rnn_layer = nn.GRU(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
         elif rnn_type == "LSTM":
-            self.rnn_layer = nn.LSTM(self.gnn_output, rnn_hidden_channels, self.num_layers,
+            self.rnn_layer = nn.LSTM(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers,
                                 batch_first=True, dropout = rnn_dropout)
             
         self.fc_layers = nn.ModuleList()
@@ -135,30 +140,41 @@ class HybridModel(nn.Module):
         #     print(k, t.shape)
         # print(gnn_output)
 
+        # input_scenarios = batch_data.x_dict['scenario']
         scenarios = gnn_output['scenario']
 
-        # print('input shape', batch_data.x_dict.shape)
 
         num_trajectories = len(slengths)
         max_len = int(torch.max(slengths).item())
         features_dim = scenarios.size(-1)
 
-        # print('num_trajectories', num_trajectories)
-        # print('max_len', max_len)
-        # print('features_dim', features_dim)
-        # print('scenarios shape', scenarios.shape)
 
-        # batch_size x max_len x features_dim
-        x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
+        # # batch_size x max_len x features_dim
+        # # x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
+        # x_seq = torch.zeros(num_trajectories*max_len, features_dim, device=scenarios.device)
+        # # iscenarios_seq = torch.zeros(num_trajectories, max_len, self.scenario_vars, device=scenarios.device)
 
-        current_idx = 0
-        first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
-        
-        for i, length in enumerate(slengths):
-            first_graph_idx[i] = current_idx
-            x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
-            current_idx += length
+        # current_idx = 0
+        # first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
+        # seq_intervals = []
+        # seq_idx = 0
+        # for i, length in enumerate(slengths):
+        #     first_graph_idx[i] = current_idx
+        #     seq_intervals.append(torch.arange(seq_idx, seq_idx+length))
+        #     # x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
+        #     # iscenarios_seq[i, :length, :] = input_scenarios[current_idx : current_idx + length, :]
+        #     current_idx += length
+        #     seq_idx += max_len
 
+        # seq_intervals = torch.cat(seq_intervals)
+        # x_seq[seq_intervals,:] = scenarios
+        # x_seq = x_seq.view(-1, max_len, features_dim)
+
+        # x_seq = torch.cat((x_seq, iscenarios_seq), dim=2)
+
+        seqs = torch.split(scenarios, slengths.tolist())
+
+        x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
 
         rnn_output, _ = self.rnn_layer(x_seq)
 
@@ -166,6 +182,7 @@ class HybridModel(nn.Module):
 
         out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
 
+        first_graph_idx = torch.cat((slengths.new_zeros(1), slengths.cumsum(dim=0)[:-1]))
         # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = batch_data.x_dict['scenario'][first_graph_idx, -self.context_vars:]
