@@ -69,11 +69,20 @@ class SocNavHeteroDataset(Dataset):
                                  'bumping_human', 'bumping_object', 'predictability']
         self.overwrite_contexts = overwrite_contexts
         self.data_augmentation = data_augmentation
-        
+
+        self.all_feature_names = {
+            'scenario': self.metrics_features+self.context_features, 
+            'goal': ['x', 'y', 'sin_a', 'cos_a', 'th_pos', 'th_angle'],
+            'robot': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'vx', 'vy', 'va', 'acc_x', 'acc_y', 'd_goal'],
+            'human': ['x', 'y', 'sin_a', 'cos_a', 'd_robot'],
+            'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot'],
+            'wall': ['x', 'y', 'd_robot']
+        }
+
         self.all_features = {
             # success, min dist to human, context vars.
             'scenario': len(self.context_features) + len(self.metrics_features), 
-            'goal': 5,
+            'goal': 6,
             'robot': 12,
             'human': 5,
             'object': 7,
@@ -99,8 +108,8 @@ class SocNavHeteroDataset(Dataset):
             self.dataset = checkpoint['trajectories']
             self.labels = checkpoint['labels']
             self.slengths = checkpoint['slength']
-        else:
-            self.process()
+        # else:
+        #     self.process()
 
 
     @property

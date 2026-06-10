@@ -1,5 +1,5 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow
+from PySide6.QtCore import Qt, QRectF
+from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile
 from PySide6.QtGui import QPainter, QImage
@@ -32,11 +32,12 @@ class MainWindow(QMainWindow):
         ui_file.close()
 
         self.ui.frame_scrollbar.valueChanged.connect(self.show_frame)
+        self.ui.entityKey.currentTextChanged.connect(self.set_entity_table)
 
         self.contextQ_file = contextQ_file
 
-        self.data_sequence = TrajectoryDataset(trajectory_file, self.contextQ_file, path = dataroot, 
-                                         overwrite_context = DEFAULT_CONTEXT, data_augmentation = True)
+        self.data_sequence = SocNavHeteroDataset(trajectory_file, data_path = dataroot, context_path = contextQ_file,
+                                         overwrite_contexts = DEFAULT_CONTEXT, data_augmentation = True)
 
         
         self.ui.trajectory_scrollbar.setMaximum(len(self.data_sequence)-1)
@@ -47,76 +48,107 @@ class MainWindow(QMainWindow):
         self.ui.show()
         self.resize(self.ui.geometry().width(), self.ui.geometry().height())
 
-    def load_trajectory(self, idx):
+    def set_entity_table(self, entity):
+        entity_len = 0
+        self.entity = entity
+        for frame in self.traj_graphs:
+            if frame[self.entity].x.shape[0]>entity_len:
+                entity_len = frame[self.entity].x.shape[0]
 
-        self.metrics = self.data_sequence.all_features
-        m, l = self.data_sequence[idx]
-        self.traj_metrics = m.tolist() 
-        self.trajectory_label = l 
-
-        tensor_trajectory = self.data_sequence.current_trajectory
-        self.trajectory = tensor_to_sequence(tensor_trajectory) #self.data_sequence.orig_data[idx]
-        self.ini_metrics_table()
-
-        traj_steps = len(self.trajectory['sequence'])
-        self.ui.frame_scrollbar.setMaximum(traj_steps-1)
-
-        x_min, y_min, x_max, y_max = self.compute_scenario_limits(self.trajectory)
-
-        FR = self.compute_scenario_FR(x_min, y_min, x_max, y_max)
-
-        self.scenario_img, self.GRID_CELL_SIZEX, self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, self.GRID_ANGLE_ORIG, self.GRID_HEIGHT = draw_scenario(self.trajectory, IMG_WIDTH, IMG_HEIGHT, FR)
-
-        self.frame_img = copy.deepcopy(self.scenario_img)
-
-        self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
-
-        self.human_colors = dict()
+        self.ini_metrics_table(self.features[self.entity], entity_len)
 
         self.show_frame(self.ui.frame_scrollbar.value())
 
+    def load_trajectory(self, idx):
+
+        self.features = self.data_sequence.all_feature_names
+        seq, label, seq_len = self.data_sequence[idx]
+        self.traj_graphs = seq 
+        self.trajectory_label = label[0].item() 
+        traj_steps = seq_len.item()
+        self.ui.frame_scrollbar.setMaximum(traj_steps-1)
+        self.entity = self.ui.entityKey.currentText()
+        self.set_entity_table(self.entity)
+        # entity_len = 0
+        # for frame in self.traj_graphs:
+        #     if frame[self.entity].x.shape(0)>entity_len:
+        #         entity_len = frame[self.entity].x.shape(0)
+
+        # self.ini_metrics_table(self.features[self.entity], entity_len)
+
+        # self.show_frame(self.ui.frame_scrollbar.value())
+
+
+        # tensor_trajectory = self.data_sequence.current_trajectory
+        # self.trajectory = tensor_to_sequence(tensor_trajectory) #self.data_sequence.orig_data[idx]
+        # self.ini_metrics_table()
+
+        # traj_steps = len(self.trajectory['sequence'])
+        # self.ui.frame_scrollbar.setMaximum(traj_steps-1)
+
+        # x_min, y_min, x_max, y_max = self.compute_scenario_limits(self.trajectory)
+
+        # FR = self.compute_scenario_FR(x_min, y_min, x_max, y_max)
+
+        # self.scenario_img, self.GRID_CELL_SIZEX, self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, self.GRID_ANGLE_ORIG, self.GRID_HEIGHT = draw_scenario(self.trajectory, IMG_WIDTH, IMG_HEIGHT, FR)
+
+        # self.frame_img = copy.deepcopy(self.scenario_img)
+
+        # self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
+
+        # self.human_colors = dict()
+
+        # self.show_frame(self.ui.frame_scrollbar.value())
+
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        for img, uiElem in self.imagesToShow:
-            pSrcImage = uiElem.geometry()
-            if len(img.shape)==3 and img.shape[2]==3:
-                image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            else:
-                image = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-            image = cv2.resize(image, ((pSrcImage.width()//4)*4, pSrcImage.height()))
-            image = QImage(image, (pSrcImage.width()//4)*4, pSrcImage.height(), QImage.Format_RGB888)
-            painter.drawImage(pSrcImage.x(), pSrcImage.y(), image)
-        painter.end()
+        pass
+        # painter = QPainter(self)
+        # for img, uiElem in self.imagesToShow:
+        #     pSrcImage = uiElem.geometry()
+        #     if len(img.shape)==3 and img.shape[2]==3:
+        #         image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #     else:
+        #         image = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        #     image = cv2.resize(image, ((pSrcImage.width()//4)*4, pSrcImage.height()))
+        #     image = QImage(image, (pSrcImage.width()//4)*4, pSrcImage.height(), QImage.Format_RGB888)
+        #     painter.drawImage(pSrcImage.x(), pSrcImage.y(), image)
+        # painter.end()
 
-    def ini_metrics_table(self):
-        self.ui.metrics_table.setRowCount(len(self.metrics)+1)
-        for idx, metric in enumerate(self.metrics):
-            self.ui.metrics_table.setItem(idx, 0, QTableWidgetItem(metric))
-            self.ui.metrics_table.setItem(idx, 1, QTableWidgetItem("{:4f}".format(0)))
-        if self.trajectory_label is not None:            
-            self.ui.metrics_table.setItem(idx, 0, QTableWidgetItem('label'))
-            self.ui.metrics_table.setItem(idx, 1, QTableWidgetItem("{:4f}".format(self.trajectory_label)))
+    def ini_metrics_table(self, features, max_number):
+
+        self.ui.metrics_table.setRowCount(len(features)*max_number)
+        idx = 0
+        for n in range(max_number):
+            for ft in features:
+                self.ui.metrics_table.setItem(idx, 0, QTableWidgetItem(ft+'_'+str(n)))
+                self.ui.metrics_table.setItem(idx, 1, QTableWidgetItem("{:4f}".format(0)))
+                idx+=1
 
         self.ui.metrics_table.resizeColumnsToContents()            
 
-    def update_metrics_table(self, metrics):
-        for idx, metric in enumerate(metrics):
-            self.ui.metrics_table.setItem(idx, 1, QTableWidgetItem("{:4f}".format(metric)))
+    def update_metrics_table(self, ft_list):
+        for idx, feature in enumerate(ft_list):
+            self.ui.metrics_table.setItem(idx, 1, QTableWidgetItem("{:4f}".format(feature)))
         self.ui.metrics_table.resizeColumnsToContents()            
 
 
     def show_frame(self, f):
-        self.frame_img = copy.deepcopy(self.scenario_img)
+        # self.frame_img = copy.deepcopy(self.scenario_img)
 
-        self.frame_img, self.human_colors = draw_frame(self.trajectory['sequence'][f], self.frame_img, self.human_colors, self.GRID_CELL_SIZEX, 
-                                              self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, 
-                                              self.GRID_ANGLE_ORIG, self.GRID_HEIGHT)
+        # self.frame_img, self.human_colors = draw_frame(self.trajectory['sequence'][f], self.frame_img, self.human_colors, self.GRID_CELL_SIZEX, 
+        #                                       self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, 
+        #                                       self.GRID_ANGLE_ORIG, self.GRID_HEIGHT)
 
-        self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
-        # closest_f = min(self.sequence_indices, key=lambda x:abs(x-f))
-        # i = self.sequence_indices.index(closest_f)
-        self.update_metrics_table(self.traj_metrics[f])
+        # self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
+        features = self.traj_graphs[f][self.entity].x.view(-1).tolist()
+        self.update_metrics_table(features)
+
+        self.view = MyView(self.traj_graphs[f])
+        self.view.setParent(self.ui.widget)
+        self.view.show()
+        self.ui.widget.setFixedSize(self.view.width(), self.view.height())
+
 
         self.update()
 
@@ -167,7 +199,24 @@ class MainWindow(QMainWindow):
 
         return FR
 
+class MyView(QGraphicsView):
+    def __init__(self, graph):
+        super().__init__()
+        self.graph = graph
+        self.scene = QGraphicsScene(self)
+        self.nodeItems = dict()
+        self.setFixedSize(1002, 1002)
+        self.create_scene()
+    
+    def create_scene(self):
+        cvtFactor = 500
+        self.scene.setSceneRect(QRectF(-500, -500, 1000, 1000))
+        rx, ry = self.graph['robot'].x[0,0]*cvtFactor, self.graph['robot'].x[0,1]*cvtFactor
+        w, l = self.graph['robot'].x[0,4]*cvtFactor, self.graph['robot'].x[0,5]*cvtFactor
+        item = self.scene.addEllipse(rx - w/2, ry - l/2, w, l, brush=Qt.darkRed)
+        self.nodeItems['robot'] = item
 
+        self.setScene(self.scene)
 
 if __name__ == "__main__":
     if len(sys.argv)<3:

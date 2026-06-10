@@ -6,35 +6,82 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>812</width>
-    <height>552</height>
+    <width>1007</width>
+    <height>606</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Draw scenario with metrics</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
-   <item row="1" column="0">
-    <widget class="QFrame" name="scenario_frame">
-     <property name="minimumSize">
-      <size>
-       <width>500</width>
-       <height>500</height>
-      </size>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
+   <item row="0" column="0">
+    <widget class="QScrollBar" name="trajectory_scrollbar">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
      </property>
     </widget>
    </item>
-   <item row="1" column="1">
+   <item row="0" column="1">
+    <widget class="QComboBox" name="entityKey">
+     <item>
+      <property name="text">
+       <string>scenario</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>goal</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>robot</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>human</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>object</string>
+      </property>
+     </item>
+     <item>
+      <property name="text">
+       <string>wall</string>
+      </property>
+     </item>
+    </widget>
+   </item>
+   <item row="1" column="0" colspan="2">
+    <widget class="QWidget" name="widget" native="true">
+     <property name="minimumSize">
+      <size>
+       <width>651</width>
+       <height>521</height>
+      </size>
+     </property>
+    </widget>
+   </item>
+   <item row="1" column="2">
     <widget class="QTableWidget" name="metrics_table">
+     <property name="minimumSize">
+      <size>
+       <width>301</width>
+       <height>528</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>16777215</width>
+       <height>16777215</height>
+      </size>
+     </property>
      <column>
       <property name="text">
-       <string>Metric</string>
+       <string>Feature</string>
       </property>
      </column>
      <column>
@@ -44,15 +91,8 @@
      </column>
     </widget>
    </item>
-   <item row="2" column="0" colspan="2">
+   <item row="2" column="0">
     <widget class="QScrollBar" name="frame_scrollbar">
-     <property name="orientation">
-      <enum>Qt::Horizontal</enum>
-     </property>
-    </widget>
-   </item>
-   <item row="0" column="0">
-    <widget class="QScrollBar" name="trajectory_scrollbar">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
      </property>
