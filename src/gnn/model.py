@@ -23,17 +23,17 @@ class GNNModel(nn.Module):
         self.layers_gat = nn.ModuleList()
         # self.layers_lin = nn.ModuleList()
 
-        self.layers_gat.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False)))
+        self.layers_gat.append(GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
         # self.layers_lin.append(Linear(-1, gnn_hidden_channels[0]))
 
         for idx in range(len(gnn_hidden_channels) - 1):
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
 
-            self.layers_gat.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False)))
+            self.layers_gat.append(GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False))
             # self.layers_lin.append(Linear(-1, output_dim))
 
-        self.layers_gat.append((GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False)))
+        self.layers_gat.append(GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False))
         # self.layers_lin.append(Linear(-1, gnn_output))
 
 
@@ -63,8 +63,8 @@ class HybridModel(nn.Module):
         self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
 
-        print("metadata")
-        print(gnn_metadata)
+        # print("metadata")
+        # print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
 
         # print(self.gnn_block)
