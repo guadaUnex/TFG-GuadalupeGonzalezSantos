@@ -6,14 +6,17 @@ from torch_geometric.nn import GATConv, Linear, to_hetero
 class GAT(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
-        self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False)
-
-        self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False)
+        # self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False)
+        self.conv1 = GATConv((-1, -1), hidden_channels, heads=8, concat=False, add_self_loops=False)
+        self.linear1 = Linear(-1, hidden_channels)
+        # self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False)
+        self.conv2 = GATConv((-1, -1), out_channels, heads=8, concat=False, add_self_loops=False)
+        self.linear2 = Linear(-1, out_channels)
 
     def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index) 
+        x = self.conv1(x, edge_index) + self.linear1(x)
         x = leaky_relu(x)
-        x = self.conv2(x, edge_index) 
+        x = self.conv2(x, edge_index) + self.linear2(x)
         return x
 
 
@@ -21,25 +24,25 @@ class GNNModel(nn.Module):
     def __init__(self, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat):
         super(GNNModel,self).__init__()
         self.layers_gat = nn.ModuleList()
-        # self.layers_lin = nn.ModuleList()
+        self.layers_lin = nn.ModuleList()
 
         self.layers_gat.append(GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
-        # self.layers_lin.append(Linear(-1, gnn_hidden_channels[0]))
+        self.layers_lin.append(Linear(-1, gnn_hidden_channels[0]))
 
         for idx in range(len(gnn_hidden_channels) - 1):
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
 
             self.layers_gat.append(GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False))
-            # self.layers_lin.append(Linear(-1, output_dim))
+            self.layers_lin.append(Linear(-1, output_dim))
 
         self.layers_gat.append(GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False))
-        # self.layers_lin.append(Linear(-1, gnn_output))
+        self.layers_lin.append(Linear(-1, gnn_output))
 
 
     def forward(self, x, edge_index):
         for i, layer in enumerate(self.layers_gat):
-            x = layer(x, edge_index)#+self.layers_lin[i](x)
+            x = layer(x, edge_index)+self.layers_lin[i](x)
             if i < len(self.layers_gat) - 1:
                 x = leaky_relu(x, negative_slope=0.1)
         return x
@@ -58,9 +61,8 @@ class HybridModel(nn.Module):
         # if self.metrics_vars>0:
         #     self.scenario_vars = context_vars+metrics_vars
 
-        # self.defineGnnBlock(gnn_hidden_channels, gnn_heads, gnn_concat)
-        # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
-        self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
+        self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
+        # self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
 
         # print("metadata")
@@ -71,26 +73,6 @@ class HybridModel(nn.Module):
         # exit()
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
-
-    def defineGnnBlock(self, gnn_hidden_channels, gnn_heads, gnn_concat):
-        layers = []
-
-        layers.append((GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False), 'x, edge_index -> x'))
-        layers.append(nn.LeakyReLU(inplace=True))
-
-        for idx in range(len(gnn_hidden_channels) - 1):
-            input_dim = gnn_hidden_channels[idx] * (gnn_heads[idx] if gnn_concat else 1)
-            output_dim = gnn_hidden_channels[idx + 1]
-            heads = gnn_heads[idx + 1]
-            layers.append((GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False),
-                           'x, edge_index -> x'))
-            layers.append(nn.LeakyReLU(negative_slope=0.1))
-
-        input_dim = gnn_hidden_channels[-1] * (gnn_heads[-1] if gnn_concat else 1)
-        layers.append((GATConv((-1, -1), self.gnn_output, heads=1, concat=False, add_self_loops=False), 
-                       'x, edge_index -> x'))
-
-        # self.gnn_block = Sequential('x, edge_index', layers)
 
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
@@ -125,22 +107,9 @@ class HybridModel(nn.Module):
 
 
     def forward(self, batch_data, slengths):
-        # print(slengths)
 
-        # for k, t in batch_data.x_dict.items():
-        #     print(k, t.shape)
-        # for k, t in batch_data.edge_index_dict.items():
-        #     print(k, t.shape, t.dtype)
-        #     print(t)
-
-        # print(batch_data.x_dict['scenario'])        
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
 
-        # for k, t in gnn_output.items():
-        #     print(k, t.shape)
-        # print(gnn_output)
-
-        # input_scenarios = batch_data.x_dict['scenario']
         scenarios = gnn_output['scenario']
 
 
@@ -149,45 +118,34 @@ class HybridModel(nn.Module):
         features_dim = scenarios.size(-1)
 
 
-        # # batch_size x max_len x features_dim
-        # # x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
-        # x_seq = torch.zeros(num_trajectories*max_len, features_dim, device=scenarios.device)
-        # # iscenarios_seq = torch.zeros(num_trajectories, max_len, self.scenario_vars, device=scenarios.device)
+        # batch_size x max_len x features_dim
+        x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
 
-        # current_idx = 0
-        # first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
-        # seq_intervals = []
-        # seq_idx = 0
-        # for i, length in enumerate(slengths):
-        #     first_graph_idx[i] = current_idx
-        #     seq_intervals.append(torch.arange(seq_idx, seq_idx+length))
-        #     # x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
-        #     # iscenarios_seq[i, :length, :] = input_scenarios[current_idx : current_idx + length, :]
-        #     current_idx += length
-        #     seq_idx += max_len
+        current_idx = 0
+        first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
+        for i, length in enumerate(slengths):
+            first_graph_idx[i] = current_idx
+            x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
+            # iscenarios_seq[i, :length, :] = input_scenarios[current_idx : current_idx + length, :]
+            current_idx += length
 
-        # seq_intervals = torch.cat(seq_intervals)
-        # x_seq[seq_intervals,:] = scenarios
-        # x_seq = x_seq.view(-1, max_len, features_dim)
-
+        # Optionally concat scenario features
         # x_seq = torch.cat((x_seq, iscenarios_seq), dim=2)
 
-        seqs = torch.split(scenarios, slengths.tolist())
+        # Alternative way to extract the embeddings
+        # seqs = torch.split(scenarios, slengths.tolist())
+        # x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
 
-        x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
+        first_graph_idx = torch.cat((slengths.new_zeros(1), slengths.cumsum(dim=0)[:-1]))        
 
         rnn_output, _ = self.rnn_layer(x_seq)
 
-        # print('rnn_output shape', rnn_output.shape)
-
         out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
 
-        first_graph_idx = torch.cat((slengths.new_zeros(1), slengths.cumsum(dim=0)[:-1]))
         # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = batch_data.x_dict['scenario'][first_graph_idx, -self.context_vars:]
             out = torch.concat((out, batch_context), axis=1)
-            # out = torch.concat((out, x_seq[:, 0, -self.context_vars:]), axis=1)
 
         for layer in self.fc_layers:
             out = layer(out)
