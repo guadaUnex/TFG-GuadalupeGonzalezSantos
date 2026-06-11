@@ -1,14 +1,11 @@
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QLineF
 from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile
 from PySide6.QtGui import QPainter, QImage
-import cv2
 import numpy as np
-import copy
 import sys
 import os
-import json
 
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)),'..'))
 
@@ -69,51 +66,22 @@ class MainWindow(QMainWindow):
         self.ui.frame_scrollbar.setMaximum(traj_steps-1)
         self.entity = self.ui.entityKey.currentText()
         self.set_entity_table(self.entity)
-        # entity_len = 0
-        # for frame in self.traj_graphs:
-        #     if frame[self.entity].x.shape(0)>entity_len:
-        #         entity_len = frame[self.entity].x.shape(0)
-
-        # self.ini_metrics_table(self.features[self.entity], entity_len)
-
-        # self.show_frame(self.ui.frame_scrollbar.value())
+        self.ui.label.display(int(self.trajectory_label*100))
 
 
-        # tensor_trajectory = self.data_sequence.current_trajectory
-        # self.trajectory = tensor_to_sequence(tensor_trajectory) #self.data_sequence.orig_data[idx]
-        # self.ini_metrics_table()
-
-        # traj_steps = len(self.trajectory['sequence'])
-        # self.ui.frame_scrollbar.setMaximum(traj_steps-1)
-
-        # x_min, y_min, x_max, y_max = self.compute_scenario_limits(self.trajectory)
-
-        # FR = self.compute_scenario_FR(x_min, y_min, x_max, y_max)
-
-        # self.scenario_img, self.GRID_CELL_SIZEX, self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, self.GRID_ANGLE_ORIG, self.GRID_HEIGHT = draw_scenario(self.trajectory, IMG_WIDTH, IMG_HEIGHT, FR)
-
-        # self.frame_img = copy.deepcopy(self.scenario_img)
-
-        # self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
-
-        # self.human_colors = dict()
-
-        # self.show_frame(self.ui.frame_scrollbar.value())
-
-
-    def paintEvent(self, event):
-        pass
-        # painter = QPainter(self)
-        # for img, uiElem in self.imagesToShow:
-        #     pSrcImage = uiElem.geometry()
-        #     if len(img.shape)==3 and img.shape[2]==3:
-        #         image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        #     else:
-        #         image = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        #     image = cv2.resize(image, ((pSrcImage.width()//4)*4, pSrcImage.height()))
-        #     image = QImage(image, (pSrcImage.width()//4)*4, pSrcImage.height(), QImage.Format_RGB888)
-        #     painter.drawImage(pSrcImage.x(), pSrcImage.y(), image)
-        # painter.end()
+    # def paintEvent(self, event):
+    #     pass
+    #     # painter = QPainter(self)
+    #     # for img, uiElem in self.imagesToShow:
+    #     #     pSrcImage = uiElem.geometry()
+    #     #     if len(img.shape)==3 and img.shape[2]==3:
+    #     #         image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #     #     else:
+    #     #         image = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    #     #     image = cv2.resize(image, ((pSrcImage.width()//4)*4, pSrcImage.height()))
+    #     #     image = QImage(image, (pSrcImage.width()//4)*4, pSrcImage.height(), QImage.Format_RGB888)
+    #     #     painter.drawImage(pSrcImage.x(), pSrcImage.y(), image)
+    #     # painter.end()
 
     def ini_metrics_table(self, features, max_number):
 
@@ -134,13 +102,6 @@ class MainWindow(QMainWindow):
 
 
     def show_frame(self, f):
-        # self.frame_img = copy.deepcopy(self.scenario_img)
-
-        # self.frame_img, self.human_colors = draw_frame(self.trajectory['sequence'][f], self.frame_img, self.human_colors, self.GRID_CELL_SIZEX, 
-        #                                       self.GRID_CELL_SIZEY, self.GRID_X_ORIG, self.GRID_Y_ORIG, 
-        #                                       self.GRID_ANGLE_ORIG, self.GRID_HEIGHT)
-
-        # self.imagesToShow = [(self.frame_img, self.ui.scenario_frame)]
         features = self.traj_graphs[f][self.entity].x.view(-1).tolist()
         self.update_metrics_table(features)
 
@@ -149,55 +110,8 @@ class MainWindow(QMainWindow):
         self.view.show()
         self.ui.widget.setFixedSize(self.view.width(), self.view.height())
 
-
         self.update()
 
-    def compute_scenario_limits(self, trajectory):
-        x_min, y_min = np.inf, np.inf
-        x_max, y_max = -np.inf, -np.inf
-
-        for w in trajectory['walls']:
-            x_min = np.minimum(np.minimum(x_min, w[0]), w[2])
-            x_max = np.maximum(np.maximum(x_max, w[0]), w[2])
-            y_min = np.minimum(np.minimum(y_min, w[1]), w[3])
-            y_max = np.maximum(np.maximum(y_max, w[1]), w[3])
-        for s in trajectory['sequence']:
-            for o in s['objects']:
-                x_min = np.minimum(x_min, o['x'])
-                x_max = np.maximum(x_max, o['x'])
-                y_min = np.minimum(y_min, o['y'])
-                y_max = np.maximum(y_max, o['y'])
-            for p in s['people']:
-                x_min = np.minimum(x_min, p['x'])
-                x_max = np.maximum(x_max, p['x'])
-                y_min = np.minimum(y_min, p['y'])
-                y_max = np.maximum(y_max, p['y'])
-
-            x_min = np.minimum(x_min, s['robot']['x'])
-            x_max = np.maximum(x_max, s['robot']['x'])
-            y_min = np.minimum(y_min, s['robot']['y'])
-            y_max = np.maximum(y_max, s['robot']['y'])
-
-            x_min = np.minimum(x_min, s['goal']['x'])
-            x_max = np.maximum(x_max, s['goal']['x'])
-            y_min = np.minimum(y_min, s['goal']['y'])
-            y_max = np.maximum(y_max, s['goal']['y'])
-        return x_min-2.5, y_min-2.5, x_max+2.5, y_max+2.5
-    
-    def compute_scenario_FR(self, x_min, y_min, x_max, y_max):
-        FR = dict()
-        H = y_max-y_min
-        W = x_max-x_min
-        FR["height"] = IMG_HEIGHT
-        FR["width"] = IMG_WIDTH
-        FR["cell_size"] = np.maximum(H / IMG_HEIGHT, W / IMG_WIDTH) 
-        FR["x_orig"] = x_min
-        FR["y_orig"] = y_min 
-        FR["angle_orig"] = 0
-
-        print(H, W, x_min, y_min, x_max, y_max, FR)
-
-        return FR
 
 class MyView(QGraphicsView):
     def __init__(self, graph):
@@ -211,10 +125,60 @@ class MyView(QGraphicsView):
     def create_scene(self):
         cvtFactor = 500
         self.scene.setSceneRect(QRectF(-500, -500, 1000, 1000))
-        rx, ry = self.graph['robot'].x[0,0]*cvtFactor, self.graph['robot'].x[0,1]*cvtFactor
-        w, l = self.graph['robot'].x[0,4]*cvtFactor, self.graph['robot'].x[0,5]*cvtFactor
-        item = self.scene.addEllipse(rx - w/2, ry - l/2, w, l, brush=Qt.darkRed)
-        self.nodeItems['robot'] = item
+        rx, ry = self.graph['robot'].x[0,0].item()*cvtFactor, self.graph['robot'].x[0,1].item()*cvtFactor
+        w, l = self.graph['robot'].x[0,4].item()*cvtFactor, self.graph['robot'].x[0,5].item()*cvtFactor
+        item = self.scene.addEllipse(rx - w/2, ry - l/2, w, l, brush=Qt.yellow)
+        self.nodeItems['robot'] = [(item, (rx, ry))]
+        s, c = self.graph['robot'].x[0,2].item(), self.graph['robot'].x[0,3].item()
+        self.scene.addLine(QLineF(rx, ry, rx+w*c, ry+w*s))#, pen=Qt.black)
+
+        self.nodeItems['wall'] = []
+        for w in range(self.graph['wall'].x.shape[0]):
+            wx, wy = self.graph['wall'].x[w,0]*cvtFactor, self.graph['wall'].x[w,1]*cvtFactor
+            r = 20
+            item = self.scene.addEllipse(wx - r/2, wy - r/2, r, r, brush=Qt.red)
+            self.nodeItems['wall'].append((item, (wx, wy)))
+
+        self.nodeItems['human'] = []
+        for h in range(self.graph['human'].x.shape[0]):
+            hx, hy = self.graph['human'].x[h,0]*cvtFactor, self.graph['human'].x[h,1]*cvtFactor
+            r = 30
+            item = self.scene.addEllipse(hx - r/2, hy - r/2, r, r, brush=Qt.blue)
+            self.nodeItems['human'].append((item, (hx, hy)))
+            s, c = self.graph['human'].x[h,2].item(), self.graph['human'].x[h,3].item()
+            self.scene.addLine(QLineF(hx, hy, hx+r*c, hy+r*s))#, pen=Qt.black)
+
+        self.nodeItems['object'] = []
+        for o in range(self.graph['object'].x.shape[0]):
+            ox, oy = self.graph['object'].x[o,0]*cvtFactor, self.graph['object'].x[o,1]*cvtFactor
+            w, l = self.graph['object'].x[o,4].item()*cvtFactor, self.graph['object'].x[o,5].item()*cvtFactor
+            item = self.scene.addEllipse(ox - w/2, oy - l/2, w, l, brush=Qt.magenta)
+            self.nodeItems['object'].append((item,(ox,oy)))
+            s, c = self.graph['object'].x[o,2].item(), self.graph['object'].x[o,3].item()
+            self.scene.addLine(QLineF(ox, oy, ox+w*c, oy+w*s))#, pen=Qt.black)
+
+
+        gx, gy = self.graph['goal'].x[0,0].item()*cvtFactor, self.graph['goal'].x[0,1].item()*cvtFactor
+        w = self.graph['goal'].x[0,4].item()*cvtFactor
+        item = self.scene.addEllipse(gx - w/2, gy - w/2, w, w, brush=Qt.green)
+        self.nodeItems['goal'] = [(item, (gx,gy))]
+        s, c = self.graph['goal'].x[0,2].item(), self.graph['goal'].x[0,3].item()
+        self.scene.addLine(QLineF(gx, gy, gx+w*c, gy+w*s))#, pen=Qt.black)
+
+        sx, sy = -400, -400
+        r = 40
+        item = self.scene.addEllipse(sx - r/2, sy - r/2, r, r, brush=Qt.cyan)
+        self.nodeItems['scenario'] = [(item, (sx,sy))]
+
+        for etype, edges in self.graph.edge_index_dict.items():
+            src, rel, dst = etype[0], etype[1], etype[2]
+            if rel == 'self' or src == 'scenario' or dst == 'scenario':
+                continue
+            # print(edges)
+            for e in range(edges.shape[1]):
+                x1, y1 = self.nodeItems[src][edges[0,e]][1][0], self.nodeItems[src][edges[0,e]][1][1]
+                x2, y2 = self.nodeItems[dst][edges[1,e]][1][0], self.nodeItems[dst][edges[1,e]][1][1]
+                self.scene.addLine(QLineF(x1, y1, x2, y2))
 
         self.setScene(self.scene)
 

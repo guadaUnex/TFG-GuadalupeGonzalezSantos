@@ -30,7 +30,7 @@ class SocNavHeteroDataset(Dataset):
         """
     
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv', 
-                   overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.3, reload=False, data_augmentation = False):
+                   overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.1, reload=False, data_augmentation = False):
         """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
 
         print("Iniciando creación del siguiente dataset: ", data_list_file)
@@ -256,7 +256,7 @@ class SocNavHeteroDataset(Dataset):
 
     # --- MÉTODOS AUXILIARES ---
 
-    def _json_to_heterodata(self, dict, index, full_conexo=False):
+    def _json_to_heterodata(self, dict, index, full_conexo=True):
         data = HeteroData()
 
         rx = dict['robot']['x'][index]
@@ -359,7 +359,7 @@ class SocNavHeteroDataset(Dataset):
         return data
     
 
-    def _sample_walls(self, walls, dist_points=2.):
+    def _sample_walls(self, walls, dist_points=0.2):
         wall_points = []
 
         wx = walls['x']
@@ -393,7 +393,7 @@ class SocNavHeteroDataset(Dataset):
         
         return unique_points
 
-    def _create_edges(self, data, full_conexo=False, dist_threshold=0.2):
+    def _create_edges(self, data, full_conexo=False, dist_threshold=0.8):
         
         node_types = data.node_types
 
