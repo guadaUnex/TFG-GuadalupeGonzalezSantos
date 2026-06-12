@@ -115,25 +115,21 @@ class HybridModel(nn.Module):
         features_dim = scenarios.size(-1)
 
 
-        # batch_size x max_len x features_dim
-        x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
+        # # batch_size x max_len x features_dim
+        # x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
 
-        current_idx = 0
-        first_graph_idx = torch.zeros(num_trajectories, device=scenarios.device, dtype=torch.long)
-        for i, length in enumerate(slengths):
-            first_graph_idx[i] = current_idx
-            x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
-            current_idx += length
+        # current_idx = 0
+        # for i, length in enumerate(slengths):
+        #     x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
+        #     current_idx += length
+
+        # Alternative way to extract the embeddings
+        seqs = torch.split(scenarios, slengths.tolist())
+        x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
 
         metrics_seq = torch.split(metrics, slengths.tolist())
         metrics_seq = torch.nn.utils.rnn.pad_sequence(metrics_seq, batch_first=True)
         x_seq = torch.cat((x_seq, metrics_seq), dim=2)
-
-        # Alternative way to extract the embeddings
-        # seqs = torch.split(scenarios, slengths.tolist())
-        # x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
-
-        # first_graph_idx = torch.cat((slengths.new_zeros(1), slengths.cumsum(dim=0)[:-1]))        
 
         rnn_output, _ = self.rnn_layer(x_seq)
 
@@ -141,7 +137,7 @@ class HybridModel(nn.Module):
 
         # print('output shape', out.shape)
         if self.context_vars > 0:
-            batch_context = batch_data.x[first_graph_idx, -self.context_vars:]
+            batch_context = metrics_seq[:, 0, -self.context_vars:]
             out = torch.concat((out, batch_context), axis=1)
 
         for layer in self.fc_layers:
