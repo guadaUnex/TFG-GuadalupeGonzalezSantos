@@ -165,10 +165,10 @@ class SocNavHomoDataset(Dataset):
                 self.labels.append(torch.tensor([rating], dtype=torch.float32))
                 self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
-            count += 1
+            # count += 1
 
-            if count == limit:
-                break
+            # if count == limit:
+            #     break
 
         # torch.save(
         #     {'trajectories': self.graphs, 'metrics': self.metrics, 'labels': self.labels, 'slength': self.slengths}, 
