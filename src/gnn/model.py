@@ -10,13 +10,18 @@ class GAT(torch.nn.Module):
         self.conv1 = GATConv((-1, -1), hidden_channels, heads=8, concat=False, add_self_loops=False)
         self.linear1 = Linear(-1, hidden_channels)
         # self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False)
-        self.conv2 = GATConv((-1, -1), out_channels, heads=8, concat=False, add_self_loops=False)
-        self.linear2 = Linear(-1, out_channels)
+        self.conv2 = GATConv((-1, -1), hidden_channels, heads=8, concat=False, add_self_loops=False)
+        self.linear2 = Linear(-1, hidden_channels)
+
+        self.conv3 = GATConv((-1, -1), out_channels, heads=8, concat=False, add_self_loops=False)
+        self.linear3 = Linear(-1, out_channels)
 
     def forward(self, x, edge_index):
         x = self.conv1(x, edge_index) + self.linear1(x)
         x = leaky_relu(x)
         x = self.conv2(x, edge_index) + self.linear2(x)
+        x = leaky_relu(x)
+        x = self.conv3(x, edge_index) + self.linear3(x)
         return x
 
 

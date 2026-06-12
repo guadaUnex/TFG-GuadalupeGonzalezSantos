@@ -416,8 +416,8 @@ class SocNavHeteroDataset(Dataset):
 
             data['robot', 'targets', 'goal'].edge_index = edge_index_rg
             data['robot', 'targets', 'goal'].edge_attr = edge_attr_rg
-            data['goal', 'assigned_to', 'goal'].edge_index = edge_index_rg
-            data['goal', 'assigned_to', 'goal'].edge_attr = edge_attr_rg
+            data['goal', 'assigned_to', 'robot'].edge_index = edge_index_rg
+            data['goal', 'assigned_to', 'robot'].edge_attr = edge_attr_rg
 
         if 'scenario' in node_types:
             for t in node_types:

@@ -163,8 +163,8 @@ for i_d, d in enumerate(FILES):
             # print(distances)
         sort_idx = np.argsort(np.array(distances))
         idx = np.arange(0, len(predictions), sample_step)
-        q_indices[abbreviated_context] = np.array(distances)[sort_idx]
-        q_preds[abbreviated_context] = np.array(predictions)[sort_idx]
+        q_indices[abbreviated_context] = np.array(distances)#[sort_idx]
+        q_preds[abbreviated_context] = np.array(predictions)#[sort_idx]
         print(context, predictions)
 
     for idx, context in enumerate(q_preds.keys()):
@@ -175,7 +175,7 @@ for i_d, d in enumerate(FILES):
             add_x_label = True
         axes_flat[idx] = plot_qualitative_multiple(q_preds[context], NAMES[i_d], context, COLORS[i_d], sample_step=sample_step,
                                                    ax=axes_flat[idx], add_xlabel=add_x_label, add_ylabel=add_y_label,
-                                                   indices = q_indices[context])
+                                                   indices = None)#q_indices[context])
 plt.tight_layout(pad=0)
 if args.saveplot is not None:
     print("Saving figure as:", args.saveplot)
