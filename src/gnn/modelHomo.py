@@ -26,23 +26,24 @@ class GAT(torch.nn.Module):
 
 
 class GNNModel(nn.Module):
-    def __init__(self, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat):
+    def __init__(self, gnn_input_channels, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat):
         super(GNNModel,self).__init__()
         self.layers_gat = nn.ModuleList()
         self.layers_lin = nn.ModuleList()
 
-        self.layers_gat.append(GATConv((-1, -1), gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
-        self.layers_lin.append(Linear(-1, gnn_hidden_channels[0]))
+        self.layers_gat.append(GATConv(gnn_input_channels, gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
+        self.layers_lin.append(Linear(gnn_input_channels, gnn_hidden_channels[0]))
 
         for idx in range(len(gnn_hidden_channels) - 1):
+            input_dim = gnn_hidden_channels[idx]
             output_dim = gnn_hidden_channels[idx + 1]
             heads = gnn_heads[idx + 1]
 
-            self.layers_gat.append(GATConv((-1, -1), output_dim, heads, gnn_concat, add_self_loops=False))
-            self.layers_lin.append(Linear(-1, output_dim))
+            self.layers_gat.append(GATConv(input_dim, output_dim, heads, gnn_concat, add_self_loops=False))
+            self.layers_lin.append(Linear(input_dim, output_dim))
 
-        self.layers_gat.append(GATConv((-1, -1), gnn_output, heads=1, concat=False, add_self_loops=False))
-        self.layers_lin.append(Linear(-1, gnn_output))
+        self.layers_gat.append(GATConv(output_dim, gnn_output, heads=1, concat=False, add_self_loops=False))
+        self.layers_lin.append(Linear(output_dim, gnn_output))
 
 
     def forward(self, x, edge_index):
@@ -53,7 +54,7 @@ class GNNModel(nn.Module):
         return x
 
 class HybridModel(nn.Module):
-    def __init__(self, num_layers, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, gnn_heads, gnn_concat, 
+    def __init__(self, num_layers, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, gnn_heads, gnn_concat, 
                  linear_layers=[], rnn_activation = 'linear', context_vars = 0, metrics_vars = 0, rnn_dropout = 0.0):
         super(HybridModel,self).__init__()
 
@@ -66,13 +67,14 @@ class HybridModel(nn.Module):
             self.scenario_vars = context_vars+metrics_vars
 
         # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
-        self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
+        self.gnn_block = GNNModel(gnn_input, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
 
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
         if rnn_type == "GRU":
+            # self.rnn_layer = nn.GRU(self.gnn_output, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
             self.rnn_layer = nn.GRU(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
         elif rnn_type == "LSTM":
             self.rnn_layer = nn.LSTM(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers,
@@ -110,9 +112,9 @@ class HybridModel(nn.Module):
         scenarios = gnn_output[robot_node]
 
 
-        num_trajectories = len(slengths)
-        max_len = int(torch.max(slengths).item())
-        features_dim = scenarios.size(-1)
+        # num_trajectories = len(slengths)
+        # max_len = int(torch.max(slengths).item())
+        # features_dim = scenarios.size(-1)
 
 
         # # batch_size x max_len x features_dim
