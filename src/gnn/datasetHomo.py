@@ -165,10 +165,10 @@ class SocNavHomoDataset(Dataset):
                 self.labels.append(torch.tensor([rating], dtype=torch.float32))
                 self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
-            # count += 1
+            count += 1
 
-            # if count == limit:
-            #     break
+            if count == limit:
+                break
 
         # torch.save(
         #     {'trajectories': self.graphs, 'metrics': self.metrics, 'labels': self.labels, 'slength': self.slengths}, 
@@ -406,61 +406,3 @@ def collate(batch):
 
 
     return batched_graphs, metrics_tensor, labels_tensor, slengths_tensor
-
-        
-
-if __name__ == "__main__":
-    print("🚀 Lanzando suite de prueba simplificada para SocNavHeteroDataset...")
-
-    # --- Configuración de tus rutas reales ---
-    DATA_PATH = '../../../dataset/labeled/labeled'
-    CONTEXT_PATH = '../../../dataset/contexts/anthropic_claude_context.csv'
-    SPLIT_PRUEBA = '../split/train_set_socnav3.txt' # El nombre del archivo dentro de DATA_PATH
-
-    print("\n[PASO 1] Instanciando dataset con data_augmentation=True...")
-    try:
-        dataset = SocNavHeteroDataset(
-            data_list_file=SPLIT_PRUEBA,
-            data_path=DATA_PATH,
-            context_path=CONTEXT_PATH,
-            timestamp_threshold=0.3,
-            data_augmentation=True,   # Activa el espejo (Mirroring)
-            reload=False              # Fuerza el procesamiento crudo (.process())
-        )
-    except Exception as e:
-        print(f"❌ Error al instanciar el dataset: {e}")
-        print("Asegúrate de que las rutas relativas sean correctas desde donde ejecutas este script.")
-        exit(1)
-
-    print(f"\n[PASO 2] Dataset cargado. Muestras totales en memoria: {len(dataset)}")
-    
-    if len(dataset) < 2:
-        print("❌ Alerta: Se necesitan más muestras para validar, pero el pipeline base no ha crasheado.")
-        exit(0)
-
-    # El elemento 0 es la secuencia Original y el 1 es su versión Espejo (Mirror)
-    print("\n[PASO 3] Extrayendo pareja simétrica (Muestra 0 [Original] vs Muestra 1 [Espejo])...")
-    traj_orig, label_orig, len_orig = dataset[0]
-    traj_mirr, label_mirr, len_mirr = dataset[1]
-
-    print("\n📊 --- INFORMACIÓN DE ESTRUCTURAS ---")
-    print(f"• Longitud temporal secuencia original: {len_orig.item()} frames")
-    print(f"• Longitud temporal secuencia espejo:   {len_mirr.item()} frames")
-    print(f"• Calificación/Label original:          {label_orig.item()}")
-    print(f"• Calificación/Label espejo:            {label_mirr.item()}")
-
-    # Inspección rápida del primer Grafo Heterogéneo de la secuencia
-    print("\n🤖 --- INSPECCIÓN DEL PRIMER FRAME DE LA TRAYECTORIA ---")
-    primer_grafo = traj_orig[0]
-    print(primer_grafo)
-    
-    if 'robot' in primer_grafo.node_types:
-        print(f"• Dimensiones del tensor del Robot: {primer_grafo['robot'].x.shape}")
-    if 'human' in primer_grafo.node_types:
-        print(f"• Dimensiones del tensor de Humanos: {primer_grafo['human'].x.shape}")
-    if 'wall' in primer_grafo.node_types:
-        print(f"• Dimensiones del tensor de Paredes: {primer_grafo['wall'].x.shape}")
-    if 'scenario' in primer_grafo.node_types:
-        print(f"• Dimensiones del nodo Escenario:    {primer_grafo['scenario'].x.shape}")
-
-    print("\n🎉 ¡Prueba finalizada! Si ves los prints de arriba sin ningún mensaje de error intermedio, tu pipeline está corregido y listo.")
