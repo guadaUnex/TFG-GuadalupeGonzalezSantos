@@ -3,8 +3,8 @@ from torch.nn import functional as F
 import numpy as np
 import sys
 from pathlib import Path
-from model import HybridModel
-from dataset import SocNavHeteroDataset, collate
+from modelHomo import HybridModel
+from datasetHomo import SocNavHomoDataset, collate
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 from torch_geometric.data import Batch
@@ -40,13 +40,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 checkpoint = torch.load(checkpoint_path, map_location=device)
 
 num_layers = checkpoint['num_layers']
+gnn_input = checkpoint['gnn_input_size']
 gnn_output = checkpoint['gnn_output']
 rnn_hidden_size = checkpoint['rnn_hidden_size']
 gnn_hidden_size = checkpoint['gnn_hidden_size']
-num_edges = checkpoint['num_edges']
 gnn_heads = checkpoint['gnn_heads']
 gnn_concat = checkpoint['gnn_concat']
-gnn_metadata = checkpoint['gnn_metadata']
 
 if 'use_new_context' in checkpoint.keys():
     USE_NEW_CONTEXT = checkpoint['use_new_context']
@@ -76,9 +75,8 @@ if 'context_features' in checkpoint.keys():
 else:
     CONTEXT_FEATURES = 0
 
-    
-model = HybridModel(num_layers, gnn_output, rnn_hidden_size, gnn_hidden_size, RNN_TYPE, num_edges,gnn_heads, gnn_concat, 
-                    gnn_metadata, linear_layers = LINEAR_LAYERS, rnn_activation = ACTIVATION, context_vars = CONTEXT_FEATURES)    
+model = HybridModel(num_layers, gnn_input, gnn_output, rnn_hidden_size, gnn_hidden_size, RNN_TYPE, gnn_heads, gnn_concat, 
+                    linear_layers = LINEAR_LAYERS, rnn_activation = ACTIVATION, context_vars = CONTEXT_FEATURES, metrics_vars=27)    
 model = model.to(device)
 # optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
@@ -124,7 +122,7 @@ for i_d, d in enumerate(FILES):
     q_indices = {}
     for abbreviated_context, context in zip(ABBREVIATED_CONTEXTS, CONTEXTS):
         print(d)
-        qual_set = SocNavHeteroDataset(d, data_root, contextQ_file, overwrite_contexts=context, timestamp_threshold = FRAME_THRESHOLD, reload=False)
+        qual_set = SocNavHomoDataset(d, data_root, contextQ_file, overwrite_contexts=context, timestamp_threshold = FRAME_THRESHOLD, reload=False)
         all_features = qual_set.get_all_features()
         qual_loader = DataLoader(qual_set, batch_size=BATCH_SIZE, shuffle=False, collate_fn=collate)
 
@@ -136,13 +134,13 @@ for i_d, d in enumerate(FILES):
         # print(qual_set.dataset)
         # print('----------')
         with torch.no_grad():
-            for trajectories, _, slengths in qual_loader:
+            for trajectories, metrics, _, slengths in qual_loader:
                 # print(slengths)
                 global_i = 0
                 for t in slengths:
                     distances_t = []
                     for i in range(t):
-                        ry = trajectories.x_dict['robot'][global_i, 1]
+                        ry = trajectories.x[global_i, 6]
                         distances_t.append(ry*10)
                         global_i += 1
                 # for t in trajectories.x_dict['robot']:
@@ -157,8 +155,9 @@ for i_d, d in enumerate(FILES):
                     dist = min_dist if abs(min_dist) > abs(max_dist) else max_dist
                     distances.append(dist)        
                 trajectories = trajectories.to(device)
+                metrics = metrics.to(device)
                 slengths = slengths.to(device)
-                preds = model(trajectories, slengths)
+                preds = model(trajectories, metrics, slengths)
                 predictions += preds.tolist()
             # print(distances)
         sort_idx = np.argsort(np.array(distances))

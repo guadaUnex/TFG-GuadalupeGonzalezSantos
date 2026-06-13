@@ -48,7 +48,7 @@ class GNNModel(nn.Module):
 
     def forward(self, x, edge_index):
         for i, layer in enumerate(self.layers_gat):
-            x = layer(x, edge_index)+self.layers_lin[i](x)
+            x = layer(x, edge_index)#+self.layers_lin[i](x)
             if i < len(self.layers_gat) - 1:
                 x = leaky_relu(x, negative_slope=0.1)
         return x
