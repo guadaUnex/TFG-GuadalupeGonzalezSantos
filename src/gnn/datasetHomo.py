@@ -218,11 +218,11 @@ class SocNavHomoDataset(Dataset):
         node_feats[self.all_features.index('y')] = ry
         node_feats[self.all_features.index('sin_a')] = math.sin(dict['robot']['a'][index])
         node_feats[self.all_features.index('cos_a')] = math.cos(dict['robot']['a'][index])
-        node_feats[self.all_features.index('vx')] = dict['robot']['vx'][index]
-        node_feats[self.all_features.index('vy')] = dict['robot']['vy'][index]
-        node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
-        node_feats[self.all_features.index('acc_x')] = dict['robot']['acc_x'][index]
-        node_feats[self.all_features.index('acc_y')] = dict['robot']['acc_y'][index]
+        # node_feats[self.all_features.index('vx')] = dict['robot']['vx'][index]
+        # node_feats[self.all_features.index('vy')] = dict['robot']['vy'][index]
+        # node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
+        # node_feats[self.all_features.index('acc_x')] = dict['robot']['acc_x'][index]
+        # node_feats[self.all_features.index('acc_y')] = dict['robot']['acc_y'][index]
         node_feats[self.all_features.index('w')] = dict['robot']['w'][index]
         node_feats[self.all_features.index('l')] = dict['robot']['l'][index]
 
@@ -255,7 +255,8 @@ class SocNavHomoDataset(Dataset):
                 px = dict['people']['x'][index, i].item()
                 py = dict['people']['y'][index, i].item()
                 pa = dict['people']['a'][index, i].item()
-                dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
+                dist_to_robot = dict['metrics']['dist_human'][index, i].item()
+                # dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
                 node_feats[self.all_features.index('human')] = 1.
                 node_feats[self.all_features.index('x')] = px
                 node_feats[self.all_features.index('y')] = py
@@ -277,7 +278,8 @@ class SocNavHomoDataset(Dataset):
                 ox = dict['objects']['x'][index, i].item()
                 oy = dict['objects']['y'][index, i].item()
                 oa = dict['objects']['a'][index, i].item()
-                dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
+                dist_to_robot = dict['metrics']['dist_object'][index, i].item()
+                # dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
                 node_feats[self.all_features.index('object')] = 1.
                 node_feats[self.all_features.index('x')] = ox
                 node_feats[self.all_features.index('y')] = oy
@@ -293,14 +295,15 @@ class SocNavHomoDataset(Dataset):
         walls = dict['walls']
         entity_idx['wall'] = []
         if walls is not None:
-            raw_points = self._sample_walls(walls)
-            for pt in raw_points:
+            raw_points, id_walls = self._sample_walls(walls)
+            for pt, idW in zip(raw_points, id_walls):
                 entity_idx['wall'].append(id)
                 id += 1
                 node_feats = torch.zeros(num_node_features, dtype=torch.float32)
                 wx = pt[0].item()
                 wy = pt[1].item()
-                dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
+                dist_to_robot = dict['metrics']['dist_walls'][index, idW].item()
+                # dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
                 node_feats[self.all_features.index('wall')] = 1.
                 node_feats[self.all_features.index('x')] = wx
                 node_feats[self.all_features.index('y')] = wy
@@ -323,6 +326,7 @@ class SocNavHomoDataset(Dataset):
         metrics_frame = torch.tensor(metrics_values, dtype=torch.float32)
 
         metrics_frame = torch.cat((metrics_frame, context_tensor), dim=0).float()
+
 
         graph_feats = torch.stack(graph_feats, dim = 0)
         num_nodes = graph_feats.shape[0]
@@ -347,6 +351,7 @@ class SocNavHomoDataset(Dataset):
 
     def _sample_walls(self, walls, dist_points=0.2):
         wall_points = []
+        id_walls =[]
 
         wx = walls['x']
         wy = walls['y']
@@ -368,16 +373,17 @@ class SocNavHomoDataset(Dataset):
                 
             num_points = max(int(distance / dist_points), 1)
             
-            for i in range(num_points + 1):
-                t = i / num_points
+            for p in range(num_points + 1):
+                t = p / num_points
                 curr_x = x1 + t * dx
                 curr_y = y1 + t * dy
                 wall_points.append([curr_x, curr_y])
+                id_walls.append(i)
                 
         points_tensor = torch.tensor(wall_points, dtype=torch.float)
         unique_points = torch.unique(points_tensor, dim=0)
         
-        return unique_points
+        return unique_points, id_walls
     
     def mirror_sequence(self, sequence):
         new_sequence = sequence

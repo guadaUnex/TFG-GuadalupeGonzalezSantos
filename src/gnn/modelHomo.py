@@ -34,13 +34,19 @@ class GNNModel(nn.Module):
         self.layers_gat.append(GATConv(gnn_input_channels, gnn_hidden_channels[0], gnn_heads[0], gnn_concat, add_self_loops=False))
         self.layers_lin.append(Linear(gnn_input_channels, gnn_hidden_channels[0]))
 
+        heads = gnn_heads[0]
         for idx in range(len(gnn_hidden_channels) - 1):
             input_dim = gnn_hidden_channels[idx]
+            if gnn_concat:
+                input_dim*=heads
             output_dim = gnn_hidden_channels[idx + 1]
-            heads = gnn_heads[idx + 1]
+            heads = gnn_heads[idx + 1]            
 
             self.layers_gat.append(GATConv(input_dim, output_dim, heads, gnn_concat, add_self_loops=False))
             self.layers_lin.append(Linear(input_dim, output_dim))
+
+        if gnn_concat:
+            output_dim*=heads
 
         self.layers_gat.append(GATConv(output_dim, gnn_output, heads=1, concat=False, add_self_loops=False))
         self.layers_lin.append(Linear(output_dim, gnn_output))
@@ -69,13 +75,22 @@ class HybridModel(nn.Module):
         # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
         self.gnn_block = GNNModel(gnn_input, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
+        self.gnnNorm = nn.LayerNorm(gnn_output)
+        self.metricsNorm = nn.LayerNorm(self.scenario_vars)
+        # self.metricsNorm = nn.LayerNorm(self.context_vars)
+
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
+
+        # self.rnnNorm = nn.LayerNorm(rnn_hidden_channels)
+        # self.contextNorm = nn.LayerNorm(self.context_vars)
 
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
         if rnn_type == "GRU":
-            # self.rnn_layer = nn.GRU(self.gnn_output, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
             self.rnn_layer = nn.GRU(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            # self.rnn_layer = nn.GRU(self.gnn_output+self.context_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            # self.rnn_layer = nn.GRU(self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            
         elif rnn_type == "LSTM":
             self.rnn_layer = nn.LSTM(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers,
                                 batch_first=True, dropout = rnn_dropout)
@@ -128,18 +143,26 @@ class HybridModel(nn.Module):
         # Alternative way to extract the embeddings
         seqs = torch.split(scenarios, slengths.tolist())
         x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
+        x_seq = self.gnnNorm(x_seq)
 
+        # WITH METRICS
         metrics_seq = torch.split(metrics, slengths.tolist())
         metrics_seq = torch.nn.utils.rnn.pad_sequence(metrics_seq, batch_first=True)
-        x_seq = torch.cat((x_seq, metrics_seq), dim=2)
+        # metrics_seq = metrics_seq[:,:,-self.context_vars:] #without metrics
+        metrics_seq_norm = self.metricsNorm(metrics_seq)
+        x_seq = torch.cat((x_seq, metrics_seq_norm), dim=2)
 
         rnn_output, _ = self.rnn_layer(x_seq)
+        # rnn_output, _ = self.rnn_layer(metrics_seq_norm) #only metrics
 
         out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
+
+        # out = self.rnnNorm(out)
 
         # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = metrics_seq[:, 0, -self.context_vars:]
+            # batch_context = self.contextNorm(batch_context)
             out = torch.concat((out, batch_context), axis=1)
 
         for layer in self.fc_layers:

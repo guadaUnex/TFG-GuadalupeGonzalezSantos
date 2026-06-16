@@ -178,7 +178,7 @@ class MyView(QGraphicsView):
         self.nodeItems['object'] = []
         for o in range(self.graph['x']['object'].shape[0]):
             ox, oy = self.graph['x']['object'][o,x_idx]*cvtFactor, self.graph['x']['object'][o,y_idx]*cvtFactor
-            w, l = self.graph['object'].x[o,w_idx].item()*cvtFactor, self.graph['x']['object'][o,l_idx].item()*cvtFactor
+            w, l = self.graph['x']['object'][o,w_idx].item()*cvtFactor, self.graph['x']['object'][o,l_idx].item()*cvtFactor
             item = self.scene.addEllipse(ox - w/2, oy - l/2, w, l, brush=Qt.magenta)
             self.nodeItems['object'].append((item,(ox,oy)))
             s, c = self.graph['x']['object'][o,s_idx].item(), self.graph['x']['object'][o,c_idx].item()
