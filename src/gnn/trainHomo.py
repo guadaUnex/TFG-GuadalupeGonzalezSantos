@@ -35,6 +35,8 @@ ACTIVATION = config_data["ACTIVATION"]
 ADD_CONTEXT_TO_OUTPUT = config_data['ADD_CONTEXT_TO_OUTPUT']
 BATCH_SIZE = config_data["BATCH_SIZE"]
 DATA_AUGMENTATION = config_data["DATA_AUGMENTATION"]
+ONLY_GNN = config_data["ONLY_GNN"]
+ONLY_METRICS = config_data["ONLY_METRICS"]
 DROPOUT = config_data["DROPOUT"]
 GNN_CONCAT = config_data["GNN_CONCAT"]
 GNN_HEADS = config_data["GNN_HEADS"]
@@ -126,7 +128,8 @@ def train_model(rnn_data, gnn_data, num_layers,
     model = HybridModel(num_layers, gnn_input=gnn_input, gnn_output = gnn_data['output'], rnn_hidden_channels= rnn_data['hidden_channels'], 
                         gnn_hidden_channels= gnn_data['hidden_channels'], rnn_type = rnn_data['type'], 
                         gnn_heads = gnn_data['heads'], gnn_concat = gnn_data['concat'], linear_layers = LINEAR_LAYERS, 
-                        rnn_activation = ACTIVATION, context_vars = context_features, metrics_vars = metrics_features, rnn_dropout = DROPOUT)
+                        rnn_activation = ACTIVATION, context_vars = context_features, metrics_vars = metrics_features, rnn_dropout = DROPOUT,
+                        only_gnn = ONLY_GNN, only_metrics = ONLY_METRICS)
     model = model.to(device)
     if LOSS == "mse":
         criterion = nn.MSELoss().to(device)
@@ -256,7 +259,9 @@ def train_model(rnn_data, gnn_data, num_layers,
                 'frame_threshold': TIMESTAMP_THRESHOLD,
                 'activation': ACTIVATION,
                 'context_features': context_features,
-                'metric_features': metrics_features,                
+                'metric_features': metrics_features,
+                'only_gnn': ONLY_GNN,
+                'only_metrics': ONLY_METRICS,
                 'gnn_output': gnn_data['output'],
                 'rnn_hidden_size': rnn_data['hidden_channels'],
                 'gnn_hidden_size': gnn_data['hidden_channels'],

@@ -315,7 +315,7 @@ def normalize_features(tDict_sequence, max_values):
                     tDict_sequence[key]['w'] = torch.where(mask, value['w'] / max_values['scale'], 0.0)
                     tDict_sequence[key]['l'] = torch.where(mask, value['l'] / max_values['scale'], 0.0)
 
-        elif key == 'metrics_ft':
+        elif key == 'metrics':
             tDict_sequence[key]['dist_human'] = value['dist_human']/max_values['scale']
             tDict_sequence[key]['dist_object'] = value['dist_object']/max_values['scale']
             tDict_sequence[key]['dist_walls'] = value['dist_walls']/max_values['scale']

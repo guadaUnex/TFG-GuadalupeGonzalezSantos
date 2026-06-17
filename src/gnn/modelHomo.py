@@ -61,22 +61,26 @@ class GNNModel(nn.Module):
 
 class HybridModel(nn.Module):
     def __init__(self, num_layers, gnn_input, gnn_output, rnn_hidden_channels, gnn_hidden_channels, rnn_type, gnn_heads, gnn_concat, 
-                 linear_layers=[], rnn_activation = 'linear', context_vars = 0, metrics_vars = 0, rnn_dropout = 0.0):
+                 linear_layers=[], rnn_activation = 'linear', context_vars = 0, metrics_vars = 0, rnn_dropout = 0.0, only_gnn = False, only_metrics = False):
         super(HybridModel,self).__init__()
 
         self.gnn_output = gnn_output
         self.num_layers = num_layers
+        self.only_gnn = only_gnn
+        self.only_metrics = only_metrics
         self.context_vars = context_vars
         self.metrics_vars = metrics_vars
-        self.scenario_vars = 0
-        if self.metrics_vars>0:
-            self.scenario_vars = context_vars+metrics_vars
+        self.scenario_vars = context_vars+metrics_vars
 
         # self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
         self.gnn_block = GNNModel(gnn_input, gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
-        self.gnnNorm = nn.LayerNorm(gnn_output)
-        self.metricsNorm = nn.LayerNorm(self.scenario_vars)
+        if not self.only_metrics:
+            self.gnnNorm = nn.LayerNorm(gnn_output)
+            if self.only_gnn:
+                self.metricsNorm = nn.LayerNorm(self.context_vars)
+            else:
+                self.metricsNorm = nn.LayerNorm(self.scenario_vars)
         # self.metricsNorm = nn.LayerNorm(self.context_vars)
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
@@ -87,7 +91,14 @@ class HybridModel(nn.Module):
 
     def defineRnnBlock(self, rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout):
         if rnn_type == "GRU":
-            self.rnn_layer = nn.GRU(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            if self.only_metrics:
+                self.rnn_layer = nn.GRU(self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            elif self.only_gnn:
+                # self.rnn_layer = nn.GRU(self.gnn_output, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+                self.rnn_layer = nn.GRU(self.gnn_output+self.context_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+            else:
+                self.rnn_layer = nn.GRU(self.gnn_output+self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
+
             # self.rnn_layer = nn.GRU(self.gnn_output+self.context_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
             # self.rnn_layer = nn.GRU(self.scenario_vars, rnn_hidden_channels, self.num_layers, batch_first=True, dropout=rnn_dropout)
             
@@ -120,37 +131,34 @@ class HybridModel(nn.Module):
 
     def forward(self, batch_data, metrics, slengths):
 
-        gnn_output = self.gnn_block(batch_data.x, batch_data.edge_index)
+        if not self.only_metrics:
+            gnn_output = self.gnn_block(batch_data.x, batch_data.edge_index)
 
-        robot_node = batch_data.ptr[:-1] # index of the first node of each graph
+            robot_node = batch_data.ptr[:-1] # index of the first node of each graph
 
-        scenarios = gnn_output[robot_node]
+            scenarios = gnn_output[robot_node]
 
-
-        # num_trajectories = len(slengths)
-        # max_len = int(torch.max(slengths).item())
-        # features_dim = scenarios.size(-1)
-
-
-        # # batch_size x max_len x features_dim
-        # x_seq = torch.zeros(num_trajectories, max_len, features_dim, device=scenarios.device)
-
-        # current_idx = 0
-        # for i, length in enumerate(slengths):
-        #     x_seq[i, :length, :] = scenarios[current_idx : current_idx + length, :]
-        #     current_idx += length
-
-        # Alternative way to extract the embeddings
-        seqs = torch.split(scenarios, slengths.tolist())
-        x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
-        x_seq = self.gnnNorm(x_seq)
+            seqs = torch.split(scenarios, slengths.tolist())
+            x_seq = torch.nn.utils.rnn.pad_sequence(seqs, batch_first=True)
+            x_seq = self.gnnNorm(x_seq)
 
         # WITH METRICS
         metrics_seq = torch.split(metrics, slengths.tolist())
         metrics_seq = torch.nn.utils.rnn.pad_sequence(metrics_seq, batch_first=True)
-        # metrics_seq = metrics_seq[:,:,-self.context_vars:] #without metrics
-        metrics_seq_norm = self.metricsNorm(metrics_seq)
-        x_seq = torch.cat((x_seq, metrics_seq_norm), dim=2)
+        if self.only_metrics:
+            x_seq = metrics_seq
+        else:
+            if self.only_gnn:
+                metrics_seq = metrics_seq[:,:,-self.context_vars:]
+            metrics_seq_norm = self.metricsNorm(metrics_seq)
+            x_seq = torch.cat((x_seq, metrics_seq_norm), dim=2)
+
+        # elif self.only_gnn:
+        #     metrics_seq = metrics_seq[:,:,-self.context_vars:] #without metrics
+        #     # x_seq = torch.cat((x_seq, metrics_seq), dim=2)
+        # else:
+        #     metrics_seq_norm = self.metricsNorm(metrics_seq)
+        #     x_seq = torch.cat((x_seq, metrics_seq_norm), dim=2)
 
         rnn_output, _ = self.rnn_layer(x_seq)
         # rnn_output, _ = self.rnn_layer(metrics_seq_norm) #only metrics
@@ -162,7 +170,6 @@ class HybridModel(nn.Module):
         # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = metrics_seq[:, 0, -self.context_vars:]
-            # batch_context = self.contextNorm(batch_context)
             out = torch.concat((out, batch_context), axis=1)
 
         for layer in self.fc_layers:
