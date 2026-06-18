@@ -259,7 +259,7 @@ class SocNavHomoDataset(Dataset):
                 if index>0 and dict['people']['id'][index][i] == dict['people']['id'][index-1][i]:
                     diff_time = dict['timestamp'][index]-dict['timestamp'][index-1]
                     vx = (px-dict['people']['x'][index-1, i].item())/diff_time
-                    vy = (px-dict['people']['y'][index-1, i].item())/diff_time
+                    vy = (py-dict['people']['y'][index-1, i].item())/diff_time
                 else:
                     vx = 0.
                     vy = 0.
