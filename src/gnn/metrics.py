@@ -286,19 +286,20 @@ def compute_metrics(tDict_sequence):
 def normalize_features(tDict_sequence, max_values):
     for key, value in tDict_sequence.items():
         if key == 'robot':
-            tDict_sequence['robot']['x'] = value['x']/max_values['scale']
-            tDict_sequence['robot']['y'] = value['y']/max_values['scale']
-            tDict_sequence['robot']['w'] = value['w']/max_values['scale']
-            tDict_sequence['robot']['l'] = value['l']/max_values['scale']
-            tDict_sequence['robot']['vx'] = value['vx']/max_values['max_v']
-            tDict_sequence['robot']['vy'] = value['vy']/max_values['max_v'] 
-            tDict_sequence['robot']['va'] = value['va']/max_values['max_va'] 
-            tDict_sequence['robot']['acc_x'] = value['acc_x']/max_values['max_acc']
-            tDict_sequence['robot']['acc_y'] = value['acc_y']/max_values['max_acc'] 
+            tDict_sequence['robot']['x'] = torch.clamp(value['x'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence['robot']['y'] = torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence['robot']['w'] = torch.clamp(value['w'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence['robot']['l'] = torch.clamp(value['l'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence['robot']['vx'] = torch.clamp(value['vx'], -max_values['max_v'], max_values['max_v']) / max_values['max_v']
+            tDict_sequence['robot']['vy'] = torch.clamp(value['vy'], -max_values['max_v'], max_values['max_v']) / max_values['max_v'] 
+            tDict_sequence['robot']['va'] = torch.clamp(value['va'], -max_values['max_va'] , max_values['max_va']) / max_values['max_va'] 
+            tDict_sequence['robot']['acc_x'] = torch.clamp(value['acc_x'], -max_values['max_acc'], max_values['max_acc']) / max_values['max_acc']
+            tDict_sequence['robot']['acc_y'] = torch.clamp(value['acc_y'], -max_values['max_acc'], max_values['max_acc']) / max_values['max_acc'] 
         
         elif key == 'goal':
-            tDict_sequence['goal']['th_p'] = value['th_p']/max_values['scale']
-            tDict_sequence['goal']['th_a'] = value['th_a']/(2*max_values['max_va'])
+            tDict_sequence['goal']['th_p'] = torch.clamp(value['th_p'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            max_th_a = 2*max_values['max_va']
+            tDict_sequence['goal']['th_a'] = torch.clamp(value['th_a'], -max_th_a, max_th_a) / max_th_a
 
         elif key in ['people', 'objects']:
             if value['x'].numel() == 0 or value['x'].size(1) == 0:
@@ -309,16 +310,16 @@ def normalize_features(tDict_sequence, max_values):
                     tDict_sequence[key]['l'] = value['l']
             else:
                 mask = value['exists']
-                tDict_sequence[key]['x'] = torch.where(mask, value['x'] / max_values['scale'], 0.0)
-                tDict_sequence[key]['y'] = torch.where(mask, value['y'] / max_values['scale'], 0.0)
+                tDict_sequence[key]['x'] = torch.where(mask, torch.clamp(value['x'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
+                tDict_sequence[key]['y'] = torch.where(mask, torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
                 if key == 'objects':
-                    tDict_sequence[key]['w'] = torch.where(mask, value['w'] / max_values['scale'], 0.0)
-                    tDict_sequence[key]['l'] = torch.where(mask, value['l'] / max_values['scale'], 0.0)
+                    tDict_sequence[key]['w'] = torch.where(mask, torch.clamp(value['w'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
+                    tDict_sequence[key]['l'] = torch.where(mask, torch.clamp(value['l'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
 
         elif key == 'metrics':
-            tDict_sequence[key]['dist_human'] = value['dist_human']/max_values['scale']
-            tDict_sequence[key]['dist_object'] = value['dist_object']/max_values['scale']
-            tDict_sequence[key]['dist_walls'] = value['dist_walls']/max_values['scale']
+            tDict_sequence[key]['dist_human'] = torch.clamp(value['dist_human'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence[key]['dist_object'] = torch.clamp(value['dist_object'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence[key]['dist_walls'] = torch.clamp(value['dist_walls'], -max_values['scale'], max_values['scale']) / max_values['scale']
 
         elif key == 'computed_metrics':
             for metric_name in tDict_sequence['computed_metrics'].keys():
@@ -326,8 +327,8 @@ def normalize_features(tDict_sequence, max_values):
                 tDict_sequence[key][metric_name] = torch.clamp(tDict_sequence['computed_metrics'][metric_name], -max_val, max_val)/max_val  
 
         elif key == 'walls':
-                tDict_sequence['walls']['x'] = value['x'] / max_values['scale']
-                tDict_sequence['walls']['y'] = value['y'] / max_values['scale'] 
+                tDict_sequence['walls']['x'] = torch.clamp(value['x'], -max_values['scale'], max_values['scale']) / max_values['scale']
+                tDict_sequence['walls']['y'] = torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale'] 
 
         elif key == 'context':
             for k in tDict_sequence['context'].keys():

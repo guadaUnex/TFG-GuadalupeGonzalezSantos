@@ -220,7 +220,7 @@ class SocNavHomoDataset(Dataset):
         node_feats[self.all_features.index('cos_a')] = math.cos(dict['robot']['a'][index])
         node_feats[self.all_features.index('vx')] = dict['robot']['vx'][index]
         node_feats[self.all_features.index('vy')] = dict['robot']['vy'][index]
-        node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
+        # node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
         # node_feats[self.all_features.index('acc_x')] = dict['robot']['acc_x'][index]
         # node_feats[self.all_features.index('acc_y')] = dict['robot']['acc_y'][index]
         node_feats[self.all_features.index('w')] = dict['robot']['w'][index]
