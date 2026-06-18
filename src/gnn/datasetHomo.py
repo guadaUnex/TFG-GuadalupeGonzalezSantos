@@ -220,7 +220,7 @@ class SocNavHomoDataset(Dataset):
         node_feats[self.all_features.index('cos_a')] = math.cos(dict['robot']['a'][index])
         node_feats[self.all_features.index('vx')] = dict['robot']['vx'][index]
         node_feats[self.all_features.index('vy')] = dict['robot']['vy'][index]
-        # node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
+        node_feats[self.all_features.index('va')] = dict['robot']['va'][index]        
         # node_feats[self.all_features.index('acc_x')] = dict['robot']['acc_x'][index]
         # node_feats[self.all_features.index('acc_y')] = dict['robot']['acc_y'][index]
         node_feats[self.all_features.index('w')] = dict['robot']['w'][index]
@@ -256,10 +256,19 @@ class SocNavHomoDataset(Dataset):
                 py = dict['people']['y'][index, i].item()
                 pa = dict['people']['a'][index, i].item()
                 dist_to_robot = dict['metrics']['dist_human'][index, i].item()
+                if index>0 and dict['people']['id'][index][i] == dict['people']['id'][index-1][i]:
+                    diff_time = dict['timestamp'][index]-dict['timestamp'][index-1]
+                    vx = (px-dict['people']['x'][index-1, i].item())/diff_time
+                    vy = (px-dict['people']['y'][index-1, i].item())/diff_time
+                else:
+                    vx = 0.
+                    vy = 0.
                 # dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
                 node_feats[self.all_features.index('human')] = 1.
                 node_feats[self.all_features.index('x')] = px
                 node_feats[self.all_features.index('y')] = py
+                node_feats[self.all_features.index('vx')] = vx
+                node_feats[self.all_features.index('vy')] = vy
                 node_feats[self.all_features.index('sin_a')] = math.sin(pa)
                 node_feats[self.all_features.index('cos_a')] = math.cos(pa)
                 node_feats[self.all_features.index('d_robot')] = dist_to_robot

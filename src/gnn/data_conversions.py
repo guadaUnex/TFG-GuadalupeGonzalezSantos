@@ -28,10 +28,11 @@ def sequence_to_tensor(data, frame_threshold, context):
                 inm_prev_frame = frame
                 inm_prev_timestamp = -float('inf')
             else:
-                inm_prev_frame = sequence[i-1]
-                inm_prev_timestamp = sequence[i-1]['timestamp']
+                inm_prev_frame = sequence[prev_index]
+                inm_prev_timestamp = sequence[prev_index]['timestamp']
             prev_frame = sequence[prev_index]
             prev_index = i
+            diff_time = current_timestamp-inm_prev_timestamp            
             people_list = {}
             people_list['id'] = [p['id'] for p in frame['people']]            
             people_list['x'] = [p['x'] for p in frame['people']]
@@ -59,7 +60,6 @@ def sequence_to_tensor(data, frame_threshold, context):
             frame['dist_human'] = d_humans
             frame['dist_object'] = d_objects
             frame['dist_wall'] = d_walls
-            diff_time = current_timestamp-inm_prev_timestamp
             diff_angle = frame['robot']['angle'] - inm_prev_frame['robot']['angle']
             frame['robot_vx'] = (r_x - inm_prev_frame['robot']['x'])/diff_time
             frame['robot_vy'] = (r_y - inm_prev_frame['robot']['y'])/diff_time
