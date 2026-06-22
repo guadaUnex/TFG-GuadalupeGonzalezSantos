@@ -41,6 +41,7 @@ DROPOUT = config_data["DROPOUT"]
 GNN_CONCAT = config_data["GNN_CONCAT"]
 GNN_HEADS = config_data["GNN_HEADS"]
 GNN_HIDDEN_SIZE = config_data["GNN_HIDDEN_SIZE"]
+GNN_OUTPUT = config_data["GNN_OUTPUT"]
 RNN_HIDDEN_SIZE = config_data["RNN_HIDDEN_SIZE"]
 LINEAR_LAYERS = config_data["LINEAR_LAYERS"]
 LOSS = config_data["LOSS"]
@@ -331,7 +332,7 @@ test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, 
 # Construimos gnn_data dinámicamente
 gnn_data = {
     'input': len(test_dataset.all_features),
-    'output': RNN_HIDDEN_SIZE,                                  
+    'output': GNN_OUTPUT,                                  
     'hidden_channels': GNN_HIDDEN_SIZE,                         
     'heads': GNN_HEADS,               
     'concat': GNN_CONCAT
@@ -340,7 +341,7 @@ gnn_data = {
 # Construimos rnn_data dinámicamente
 rnn_data = {
     'type': RNN_TYPE,  
-    'input': RNN_HIDDEN_SIZE, # El input de la rnn es igual al output de la gnn                                     
+    'input': GNN_OUTPUT, # El input de la rnn es igual al output de la gnn                                     
     'hidden_channels': RNN_HIDDEN_SIZE                          
 }
 

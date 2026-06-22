@@ -249,6 +249,7 @@ def compute_metrics(tDict_sequence):
 
     metrics_dict = {
         'dist_to_goal_pos': dist_to_goal_pos,
+        'dist_to_goal_angle': dist_to_goal_angle,
         'success': success,
         'hum_exists': hum_exists,
         'wall_exist': wall_exists,
@@ -298,7 +299,7 @@ def normalize_features(tDict_sequence, max_values):
         
         elif key == 'goal':
             tDict_sequence['goal']['th_p'] = torch.clamp(value['th_p'], -max_values['scale'], max_values['scale']) / max_values['scale']
-            max_th_a = 2*max_values['max_va']
+            max_th_a = max_values['max_va']
             tDict_sequence['goal']['th_a'] = torch.clamp(value['th_a'], -max_th_a, max_th_a) / max_th_a
 
         elif key in ['people', 'objects']:
