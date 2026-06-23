@@ -1,8 +1,8 @@
 from PySide6.QtCore import Qt, QRectF, QLineF
-from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene
+from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile
-from PySide6.QtGui import QPainter, QImage
+from PySide6.QtGui import QPen, QBrush
 import numpy as np
 import sys
 import os
@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
         for frame in self.traj_graphs:
             if frame['x'][self.entity].shape[0]>entity_len:
                 entity_len = frame['x'][self.entity].shape[0]
-
+        self.entity_len = entity_len
         self.ini_metrics_table(self.features[self.entity], entity_len)
 
         self.show_frame(self.ui.frame_scrollbar.value())
@@ -88,8 +88,13 @@ class MainWindow(QMainWindow):
         self.entities = copy.copy(self.data_sequence.type_features)
         self.all_features = self.data_sequence.all_features
         self.features = {}
-        for entity in self.entities:
-            self.features[entity] = self.data_sequence.geometric_features
+        self.geometric_features = self.data_sequence.robot_features + self.data_sequence.goal_features + self.data_sequence.human_features + \
+                                    self.data_sequence.object_features + self.data_sequence.wall_features
+        self.features['robot'] = self.data_sequence.robot_features
+        self.features['goal'] = self.data_sequence.goal_features
+        self.features['human'] = self.data_sequence.human_features
+        self.features['object'] = self.data_sequence.object_features
+        self.features['wall'] = self.data_sequence.wall_features
         self.features['scenario'] = self.data_sequence.metrics_features +  self.data_sequence.context_features
         self.entities += ['scenario']
         seq, metrics, label, seq_len = self.data_sequence[idx]
@@ -122,9 +127,13 @@ class MainWindow(QMainWindow):
 
     def show_frame(self, f):
         features = self.traj_graphs[f]['x'][self.entity].reshape(-1).tolist()
+        if self.entity!='scenario':
+            idx_0 = self.geometric_features.index(self.features[self.entity][0])
+            features = self.traj_graphs[f]['x'][self.entity][:,idx_0:idx_0+len(self.features[self.entity])]
+            features = features.reshape(-1).tolist()
         self.update_metrics_table(features)
 
-        self.view = MyView(self.traj_graphs[f], self.data_sequence.geometric_features)
+        self.view = MyView(self.traj_graphs[f], self.geometric_features)
         self.view.setParent(self.ui.widget)
         self.view.show()
         self.ui.widget.setFixedSize(self.view.width(), self.view.height())
@@ -143,13 +152,12 @@ class MyView(QGraphicsView):
         self.create_scene()
     
     def create_scene(self):
-        x_idx = self.geometric_features.index('x')
-        y_idx = self.geometric_features.index('y')
-        s_idx = self.geometric_features.index('sin_a')
-        c_idx = self.geometric_features.index('cos_a')
-        w_idx = self.geometric_features.index('w')
-        l_idx = self.geometric_features.index('l')
-        th_idx = self.geometric_features.index('th_pos')
+        x_idx = self.geometric_features.index('r_x')
+        y_idx = self.geometric_features.index('r_y')
+        s_idx = self.geometric_features.index('r_sin_a')
+        c_idx = self.geometric_features.index('r_cos_a')
+        w_idx = self.geometric_features.index('r_w')
+        l_idx = self.geometric_features.index('r_l')
         cvtFactor = 500
         self.scene.setSceneRect(QRectF(-500, -500, 1000, 1000))
         rx, ry = self.graph['x']['robot'][0,x_idx].item()*cvtFactor, self.graph['x']['robot'][0,y_idx].item()*cvtFactor
@@ -159,12 +167,41 @@ class MyView(QGraphicsView):
         s, c = self.graph['x']['robot'][0,s_idx].item(), self.graph['x']['robot'][0,c_idx].item()
         self.scene.addLine(QLineF(rx, ry, rx+w*c, ry+w*s))#, pen=Qt.black)
 
+
+
+        x_idx = self.geometric_features.index('w_x')
+        y_idx = self.geometric_features.index('w_y')
+        s_idx = self.geometric_features.index('w_sin_a')
+        c_idx = self.geometric_features.index('w_cos_a')
+        w_idx = self.geometric_features.index('w_w')
+        l_idx = self.geometric_features.index('w_l')
         self.nodeItems['wall'] = []
-        for w in range(self.graph['x']['wall'].shape[0]):
-            wx, wy = self.graph['x']['wall'][w,x_idx]*cvtFactor, self.graph['x']['wall'][w,y_idx]*cvtFactor
+        for wall in range(self.graph['x']['wall'].shape[0]):
+            wx, wy = self.graph['x']['wall'][wall,x_idx]*cvtFactor, self.graph['x']['wall'][wall,y_idx]*cvtFactor
             r = 20
-            item = self.scene.addEllipse(wx - r/2, wy - r/2, r, r, brush=Qt.red)
+            w, l = self.graph['x']['wall'][wall,w_idx].item()*cvtFactor, self.graph['x']['wall'][wall,l_idx].item()*cvtFactor
+            s, c = self.graph['x']['wall'][wall,s_idx].item(), self.graph['x']['wall'][wall,c_idx].item()
+            entity = QGraphicsEllipseItem()
+            entity.setRect(QRectF(-l/2, -w/2, l, w))
+            entity.setPen(QPen(Qt.black))
+            entity.setBrush(QBrush(Qt.red, Qt.SolidPattern))
+            ang = np.atan2(s,c)*180/np.pi
+            entity.setRotation(ang)
+            entity.setPos(wx,wy)
+            item = self.scene.addItem(entity)
+
+            # item = self.scene.addEllipse(wx - r/2, wy - r/2, r, r, brush=Qt.red)
             self.nodeItems['wall'].append((item, (wx, wy)))
+
+            self.scene.addLine(QLineF(wx, wy, wx+r*c, wy+r*s))#, pen=Qt.black)
+            # text = self.scene.addText('w'+str(wall))
+            # text.setDefaultTextColor(Qt.black)
+            # text.setPos(wx,wy)
+
+        x_idx = self.geometric_features.index('h_x')
+        y_idx = self.geometric_features.index('h_y')
+        s_idx = self.geometric_features.index('h_sin_a')
+        c_idx = self.geometric_features.index('h_cos_a')
 
         self.nodeItems['human'] = []
         for h in range(self.graph['x']['human'].shape[0]):
@@ -175,15 +212,37 @@ class MyView(QGraphicsView):
             s, c = self.graph['x']['human'][h,s_idx].item(), self.graph['x']['human'][h,c_idx].item()
             self.scene.addLine(QLineF(hx, hy, hx+r*c, hy+r*s))#, pen=Qt.black)
 
+        x_idx = self.geometric_features.index('o_x')
+        y_idx = self.geometric_features.index('o_y')
+        s_idx = self.geometric_features.index('o_sin_a')
+        c_idx = self.geometric_features.index('o_cos_a')
+        w_idx = self.geometric_features.index('o_w')
+        l_idx = self.geometric_features.index('o_l')
+
         self.nodeItems['object'] = []
         for o in range(self.graph['x']['object'].shape[0]):
             ox, oy = self.graph['x']['object'][o,x_idx]*cvtFactor, self.graph['x']['object'][o,y_idx]*cvtFactor
             w, l = self.graph['x']['object'][o,w_idx].item()*cvtFactor, self.graph['x']['object'][o,l_idx].item()*cvtFactor
-            item = self.scene.addEllipse(ox - w/2, oy - l/2, w, l, brush=Qt.magenta)
-            self.nodeItems['object'].append((item,(ox,oy)))
             s, c = self.graph['x']['object'][o,s_idx].item(), self.graph['x']['object'][o,c_idx].item()
-            self.scene.addLine(QLineF(ox, oy, ox+w*c, oy+w*s))#, pen=Qt.black)
+            entity = QGraphicsEllipseItem()
+            entity.setRect(QRectF(-l/2, -w/2, l, w))
+            entity.setPen(QPen(Qt.black))
+            entity.setBrush(QBrush(Qt.magenta, Qt.SolidPattern))
+            ang = np.atan2(s,c)*180/np.pi
+            entity.setRotation(ang)
+            entity.setPos(ox,oy)
+            item = self.scene.addItem(entity)
+            # item = self.scene.addEllipse(ox - w/2, oy - l/2, w, l, brush=Qt.magenta)
+            self.nodeItems['object'].append((item,(ox,oy)))
 
+            self.scene.addLine(QLineF(ox, oy, ox+l*c, oy+l*s))#, pen=Qt.black)
+
+
+        x_idx = self.geometric_features.index('g_x')
+        y_idx = self.geometric_features.index('g_y')
+        s_idx = self.geometric_features.index('g_sin_a')
+        c_idx = self.geometric_features.index('g_cos_a')
+        th_idx = self.geometric_features.index('th_pos')
 
         gx, gy = self.graph['x']['goal'][0,x_idx].item()*cvtFactor, self.graph['x']['goal'][0,y_idx].item()*cvtFactor
         w = self.graph['x']['goal'][0,th_idx].item()*cvtFactor
@@ -202,16 +261,6 @@ class MyView(QGraphicsView):
                 x1, y1 = self.nodeItems[src_ent][src_idx][1][0], self.nodeItems[src_ent][src_idx][1][1]
                 x2, y2 = self.nodeItems[dst_ent][dst_idx][1][0], self.nodeItems[dst_ent][dst_idx][1][1]
                 self.scene.addLine(QLineF(x1, y1, x2, y2))
-
-        # for etype, edges in self.graph.edge_index_dict.items():
-        #     src, rel, dst = etype[0], etype[1], etype[2]
-        #     if rel == 'self' or src == 'scenario' or dst == 'scenario':
-        #         continue
-        #     # print(edges)
-        #     for e in range(edges.shape[1]):
-        #         x1, y1 = self.nodeItems[src][edges[0,e]][1][0], self.nodeItems[src][edges[0,e]][1][1]
-        #         x2, y2 = self.nodeItems[dst][edges[1,e]][1][0], self.nodeItems[dst][edges[1,e]][1][1]
-        #         self.scene.addLine(QLineF(x1, y1, x2, y2))
 
         self.setScene(self.scene)
 
