@@ -46,14 +46,15 @@ class SocNavHeteroDataset(Dataset):
 
         self.MAX_TTC = 10
 
-        self.metrics_features = ['dist_to_goal_pos', 'success', 'hum_exists', 'wall_exist', 'dist_nearest_hum', 'dist_nearest_object', 
+        self.metrics_features = ['dist_to_goal_pos', 'dist_to_goal_angle', 'success', 'hum_exists', 'wall_exist', 'dist_nearest_hum', 'dist_nearest_object', 
                                  'dist_wall', 'human_collision_flag', 'object_collision_flag', 'wall_collision_flag',
                                  'social_space_intrusionA', 'num_near_humansA', 'num_near_humansA2', 'social_space_intrusionB',
                                  'num_near_humansB', 'num_near_humansB2', 'social_space_instrusionC', 'num_near_humansC',
                                  'num_near_humansC2', 'min_ttc', 'min_ttc2', 'max_fear', 'max_panic', 'global_dist_nearest_hum',
                                  'path_efficiency_ratio', 'step_ratio', 'episode_end']
         
-        self.max_values = {'scale': 10.0, 'max_v': 2.0, 'max_va': np.pi, 'max_acc' : 3.0, 'max_c': 100.0, 'dist_to_goal_pos': 10, 'success': 1, 'hum_exists': 1, 'wall_exist': 1, 'dist_nearest_hum': 10, 'dist_nearest_object': 10, 
+        self.max_values = {'scale': 10.0, 'max_v': 2.0, 'max_va': np.pi, 'max_acc' : 3.0, 'max_c': 100.0, 'dist_to_goal_pos': 10, 'dist_to_goal_angle': np.pi, 'success': 1, 
+                                'hum_exists': 1, 'wall_exist': 1, 'dist_nearest_hum': 10, 'dist_nearest_object': 10, 
                                  'dist_wall': 10, 'human_collision_flag': 1, 'object_collision_flag': 1, 'wall_collision_flag': 1,
                                  'social_space_intrusionA': 1, 'num_near_humansA': 10, 'num_near_humansA2': 10, 'social_space_intrusionB': 1,
                                  'num_near_humansB': 10, 'num_near_humansB2': 10, 'social_space_intrusionC': 1, 'num_near_humansC': 10,
@@ -76,7 +77,7 @@ class SocNavHeteroDataset(Dataset):
             'robot': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'vx', 'vy', 'va', 'acc_x', 'acc_y', 'd_goal'],
             'human': ['x', 'y', 'sin_a', 'cos_a', 'd_robot'],
             'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot'],
-            'wall': ['x', 'y', 'd_robot']
+            'wall': ['x', 'y', 'sin_a', 'cos_a', 'd_robot', 'w', 'l']
         }
 
         self.all_features = {
@@ -86,7 +87,7 @@ class SocNavHeteroDataset(Dataset):
             'robot': 12,
             'human': 5,
             'object': 7,
-            'wall': 3
+            'wall': 7
         }
 
         self.dataset = []
@@ -146,7 +147,6 @@ class SocNavHeteroDataset(Dataset):
             else:
                 context_desc = self.overwrite_contexts
             context = self.context_df.loc[context_desc.rstrip()].to_dict()
-            
 
             walls = json_data.get('walls', [])
             rating = json_data.get('label',0.)
@@ -176,10 +176,10 @@ class SocNavHeteroDataset(Dataset):
                 self.labels.append(torch.tensor([rating], dtype=torch.float32))
                 self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
-            # count += 1
+            count += 1
 
-            # if count == limit:
-            #     break
+            if count == limit:
+                break
 
         # torch.save(
         #     {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
@@ -325,16 +325,16 @@ class SocNavHeteroDataset(Dataset):
         # Walls nodes
         walls = dict['walls']
         if walls is not None:
-            raw_points = self._sample_walls(walls)
+            raw_points, id_walls, a_walls, l_walls = self._get_walls(walls)
             w_list = []
-            for pt in raw_points:
-                wx = pt[0].item()
-                wy = pt[1].item()
-                dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
-                w_list.append([wx, wy, dist_to_robot])
+            for pt, idW, wa, la in zip(raw_points, id_walls, a_walls, l_walls):
+                wx = pt[0]
+                wy = pt[1]
+                dist_to_robot = dict['metrics']['dist_walls'][index, idW].item()
+                w_list.append([wx, wy, math.sin(wa), math.cos(wa), dist_to_robot, la, 0.01])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
         else:
-            data['wall'].x = torch.empty((0, 3))
+            data['wall'].x = torch.empty((0, 7))
 
         context_values = []
         for c_key in dict['context'].keys():
@@ -357,6 +357,36 @@ class SocNavHeteroDataset(Dataset):
         data = self._create_edges(data, full_conexo=full_conexo)
 
         return data
+    
+
+    def _get_walls(self, walls):
+        wall_points = []
+        id_walls =[]
+        angle_walls = []
+        length_walls = []
+
+        wx = walls['x']
+        wy = walls['y']
+
+        num_walls = len(wx)//2
+
+        for i in range(num_walls):
+            x1 = wx[2 * i].item()
+            y1 = wy[2 * i].item()
+            x2 = wx[2 * i + 1].item()
+            y2 = wy[2 * i + 1].item()
+
+            dx, dy = x2 - x1, y2 - y1
+            distance = (dx**2 + dy**2)**0.5
+            angle = np.arctan2(dy, dx) + np.pi/2
+            curr_x = (x1 + x2)/2
+            curr_y = (y1 + y2)/2
+            wall_points.append([curr_x, curr_y])
+            id_walls.append(i)
+            angle_walls.append(angle)
+            length_walls.append(distance)
+
+        return wall_points, id_walls, angle_walls, length_walls
     
 
     def _sample_walls(self, walls, dist_points=0.2):

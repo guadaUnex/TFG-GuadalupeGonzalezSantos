@@ -315,7 +315,7 @@ def normalize_features(tDict_sequence, max_values):
                 tDict_sequence[key]['y'] = torch.where(mask, torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
                 if key == 'objects':
                     tDict_sequence[key]['w'] = torch.where(mask, torch.clamp(value['w'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
-                    tDict_sequence[key]['l'] = torch.where(mask, torch.clamp(value['l'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)
+                    tDict_sequence[key]['l'] = torch.where(mask, torch.clamp(value['l'], -max_values['scale'], max_values['scale']) / max_values['scale'], 0.0)            
 
         elif key == 'metrics':
             tDict_sequence[key]['dist_human'] = torch.clamp(value['dist_human'], -max_values['scale'], max_values['scale']) / max_values['scale']
@@ -325,14 +325,14 @@ def normalize_features(tDict_sequence, max_values):
         elif key == 'computed_metrics':
             for metric_name in tDict_sequence['computed_metrics'].keys():
                 max_val = max_values.get(metric_name)
-                tDict_sequence[key][metric_name] = torch.clamp(tDict_sequence['computed_metrics'][metric_name], -max_val, max_val)/max_val  
+                tDict_sequence[key][metric_name] = torch.clamp(tDict_sequence['computed_metrics'][metric_name], -max_val, max_val)/max_val
 
         elif key == 'walls':
-                tDict_sequence['walls']['x'] = torch.clamp(value['x'], -max_values['scale'], max_values['scale']) / max_values['scale']
-                tDict_sequence['walls']['y'] = torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale'] 
+            tDict_sequence['walls']['x'] = torch.clamp(value['x'], -max_values['scale'], max_values['scale']) / max_values['scale']
+            tDict_sequence['walls']['y'] = torch.clamp(value['y'], -max_values['scale'], max_values['scale']) / max_values['scale'] 
 
         elif key == 'context':
             for k in tDict_sequence['context'].keys():
-                tDict_sequence['context'][k] = tDict_sequence['context'][k] / max_values['max_c']
+                tDict_sequence['context'][k] = tDict_sequence['context'][k] / max_values['max_c']            
 
     return tDict_sequence

@@ -34,7 +34,7 @@ class MainWindow(QMainWindow):
         self.contextQ_file = contextQ_file
 
         self.data_sequence = SocNavHeteroDataset(trajectory_file, data_path = dataroot, context_path = contextQ_file,
-                                         overwrite_contexts = DEFAULT_CONTEXT, data_augmentation = True)
+                                         overwrite_contexts = DEFAULT_CONTEXT, reload=True, data_augmentation = True)
 
         
         self.ui.trajectory_scrollbar.setMaximum(len(self.data_sequence)-1)
