@@ -20,4 +20,4 @@ Los objetivos específicos del repositorio incluyen:
 
 ## Realizado por
 * **Guadalupe González Santos** – *Universidad de Extremadura (TFG)*
-* Basado en la investigación de: A. Kapoor, S. Swamy, P. Bachiller y L. J. Manso.
+* Basado en la investigación de: Pilar Bachiller-Burgos, Ulysses Bernardet, Luis V. Calderita, Pranup Chhetri, Anthony Francis, Noriaki Hirose, Noé Pérez, Dhruv Shah, Phani T. Singamaneni, Xuesu Xiao, Luis J. Manso [https://github.com/SocNavData/SocNavData2026](https://github.com/SocNavData/SocNavData2026)
