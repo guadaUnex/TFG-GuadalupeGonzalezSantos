@@ -68,7 +68,7 @@ ABBREVIATED_CONTEXTS = config_qtest["ABBREVIATED_CONTEXTS"]
 
 RELOAD = False
 
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("Using device:", device)
 
 SAVE_NAME = '_'.join(['GNN', RNN_TYPE, LOSS, str(NUM_LAYERS), str(LR)])
