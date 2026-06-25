@@ -7,21 +7,21 @@ class GAT(torch.nn.Module):
     def __init__(self, hidden_channels, out_channels):
         super().__init__()
         # self.conv1 = GATConv((-1, -1), hidden_channels, add_self_loops=False)
-        self.conv1 = GATConv((-1, -1), hidden_channels, heads=8, concat=False, add_self_loops=False)
-        self.linear1 = Linear(-1, hidden_channels)
+        self.conv1 = GATConv((-1, -1), hidden_channels[0], heads=8, concat=False, add_self_loops=False)
+        # self.linear1 = Linear(-1, hidden_channels)
         # self.conv2 = GATConv((-1, -1), out_channels, add_self_loops=False)
-        self.conv2 = GATConv((-1, -1), hidden_channels, heads=8, concat=False, add_self_loops=False)
-        self.linear2 = Linear(-1, hidden_channels)
+        self.conv2 = GATConv((-1, -1), hidden_channels[1], heads=8, concat=False, add_self_loops=False)
+        # self.linear2 = Linear(-1, hidden_channels)
 
         self.conv3 = GATConv((-1, -1), out_channels, heads=8, concat=False, add_self_loops=False)
-        self.linear3 = Linear(-1, out_channels)
+        # self.linear3 = Linear(-1, out_channels)
 
     def forward(self, x, edge_index):
-        x = self.conv1(x, edge_index) + self.linear1(x)
+        x = self.conv1(x, edge_index) #+ self.linear1(x)
         x = leaky_relu(x)
-        x = self.conv2(x, edge_index) + self.linear2(x)
+        x = self.conv2(x, edge_index) #+ self.linear2(x)
         x = leaky_relu(x)
-        x = self.conv3(x, edge_index) + self.linear3(x)
+        x = self.conv3(x, edge_index) #+ self.linear3(x)
         return x
 
 
@@ -66,7 +66,7 @@ class HybridModel(nn.Module):
         # if self.metrics_vars>0:
         #     self.scenario_vars = context_vars+metrics_vars
 
-        self.gnn_block = GAT(gnn_hidden_channels[0], gnn_output)
+        self.gnn_block = GAT(gnn_hidden_channels, gnn_output)
         # self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
 

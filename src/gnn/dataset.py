@@ -73,21 +73,21 @@ class SocNavHeteroDataset(Dataset):
 
         self.all_feature_names = {
             'scenario': self.metrics_features+self.context_features, 
-            'goal': ['x', 'y', 'sin_a', 'cos_a', 'th_pos', 'th_angle'],
-            'robot': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'vx', 'vy', 'va', 'acc_x', 'acc_y', 'd_goal'],
-            'human': ['x', 'y', 'sin_a', 'cos_a', 'd_robot'],
-            'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot'],
+            'goal': ['x', 'y', 'sin_a', 'cos_a', 'th_pos', 'th_angle', 'dlin', 'dang'],
+            'robot': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'vx', 'vy', 'va', 'acc_x', 'acc_y'],
+            'human': ['x', 'y', 'sin_a', 'cos_a', 'd_robot', 'dcenter_r'],
+            'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot, dcenter_r'],
             'wall': ['x', 'y', 'sin_a', 'cos_a', 'd_robot', 'w', 'l']
         }
 
         self.all_features = {
             # success, min dist to human, context vars.
             'scenario': len(self.context_features) + len(self.metrics_features), 
-            'goal': 6,
-            'robot': 12,
-            'human': 5,
-            'object': 7,
-            'wall': 7
+            'goal': len(self.all_feature_names['goal']),
+            'robot': len(self.all_feature_names['robot']),
+            'human': len(self.all_feature_names['human']),
+            'object': len(self.all_feature_names['object']),
+            'wall': len(self.all_feature_names['wall'])
         }
 
         self.dataset = []
@@ -209,28 +209,28 @@ class SocNavHeteroDataset(Dataset):
                 ('scenario', 'contains', 'human'), 
                 ('scenario', 'contains', 'object'), 
                 ('scenario', 'contains', 'wall'), 
-                # ('goal', 'near_to', 'human'), 
-                # ('human', 'near_to', 'goal'), 
-                # ('goal', 'near_to', 'object'), 
-                # ('object', 'near_to', 'goal'), 
-                # ('goal', 'near_to', 'wall'), 
-                # ('wall', 'near_to', 'goal'), 
-                ('goal', 'near_to', 'robot'), 
-                ('robot', 'near_to', 'goal'), 
-                ('robot', 'near_to', 'wall'), 
-                ('wall', 'near_to', 'robot'), 
-                ('robot', 'near_to', 'human'), 
-                ('human', 'near_to', 'robot'), 
-                ('robot', 'near_to', 'object'), 
-                ('object', 'near_to', 'robot'), 
-                # ('human', 'near_to', 'human'), 
-                # ('human', 'near_to', 'object'), 
-                # ('object', 'near_to', 'human'), 
-                # ('human', 'near_to', 'wall'), 
-                # ('wall', 'near_to', 'human'), 
-                # ('object', 'near_to', 'object'),
-                # ('object', 'near_to', 'wall'),
-                # ('wall', 'near_to', 'object')                
+                # # ('goal', 'near_to', 'human'), 
+                # # ('human', 'near_to', 'goal'), 
+                # # ('goal', 'near_to', 'object'), 
+                # # ('object', 'near_to', 'goal'), 
+                # # ('goal', 'near_to', 'wall'), 
+                # # ('wall', 'near_to', 'goal'), 
+                # ('goal', 'near_to', 'robot'), 
+                # ('robot', 'near_to', 'goal'), 
+                # ('robot', 'near_to', 'wall'), 
+                # ('wall', 'near_to', 'robot'), 
+                # ('robot', 'near_to', 'human'), 
+                # ('human', 'near_to', 'robot'), 
+                # ('robot', 'near_to', 'object'), 
+                # ('object', 'near_to', 'robot'), 
+                # # ('human', 'near_to', 'human'), 
+                # # ('human', 'near_to', 'object'), 
+                # # ('object', 'near_to', 'human'), 
+                # # ('human', 'near_to', 'wall'), 
+                # # ('wall', 'near_to', 'human'), 
+                # # ('object', 'near_to', 'object'),
+                # # ('object', 'near_to', 'wall'),
+                # # ('wall', 'near_to', 'object')                
             ]
         )
         return metadata
@@ -268,10 +268,13 @@ class SocNavHeteroDataset(Dataset):
                                         math.sin(dict['goal']['a'][index]), 
                                         math.cos(dict['goal']['a'][index]),
                                         dict['goal']['th_p'][index], 
-                                        dict['goal']['th_a'][index]], 
-                                        dtype=torch.float).view(1,-1)
+                                        dict['goal']['th_a'][index],
+                                        dict['computed_metrics']['dist_to_goal_pos'][index],
+                                        dict['computed_metrics']['dist_to_goal_angle'][index]], dtype=torch.float).view(1,-1)
 
         # Robot node
+        acc_x = 0. #dict['robot']['acc_x'][index]
+        acc_y = 0. #dict['robot']['acc_y'][index]
         data['robot'].x = torch.tensor([[rx, 
                                          ry, 
                                          math.sin(dict['robot']['a'][index]), 
@@ -281,9 +284,8 @@ class SocNavHeteroDataset(Dataset):
                                          dict['robot']['vx'][index], 
                                          dict['robot']['vy'][index], 
                                          dict['robot']['va'][index], 
-                                         dict['robot']['acc_x'][index], 
-                                         dict['robot']['acc_y'][index], 
-                                         dict['computed_metrics']['dist_to_goal_pos'][index]]], dtype=torch.float).view(1,-1)
+                                         acc_x, 
+                                         acc_y]], dtype=torch.float).view(1,-1)
         
 
         num_humans = dict['people']['x'].shape[1]
@@ -295,13 +297,15 @@ class SocNavHeteroDataset(Dataset):
                 px = dict['people']['x'][index, i].item()
                 py = dict['people']['y'][index, i].item()
                 pa = dict['people']['a'][index, i].item()
-                dist_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
+                dist_center = math.sqrt((px-rx)**2+(py-ry)**2)
+                dist_to_robot = dict['metrics']['dist_human'][index, i].item()
                 p_list.append([px, 
                             py, 
                             math.sin(pa), 
                             math.cos(pa), 
-                            dist_to_robot]) 
-        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, 5))
+                            dist_to_robot,
+                            dist_center]) 
+        data['human'].x = torch.tensor(p_list, dtype=torch.float) if p_list else torch.empty((0, self.all_features['human']))
 
         num_objects = dict['objects']['x'].shape[1]
         objects_exist = dict['objects']['exists']
@@ -312,15 +316,17 @@ class SocNavHeteroDataset(Dataset):
                 ox = dict['objects']['x'][index, i].item()
                 oy = dict['objects']['y'][index, i].item()
                 oa = dict['objects']['a'][index, i].item()
-                dist_to_robot = math.sqrt((ox-rx)**2+(oy-ry)**2)
+                dist_center = math.sqrt((ox-rx)**2+(oy-ry)**2)
+                dist_to_robot = dict['metrics']['dist_object'][index, i].item()
                 o_list.append([ox, 
                             oy, 
                             math.sin(oa), 
                             math.cos(oa), 
                             dict['objects']['w'][index, i], 
                             dict['objects']['l'][index, i], 
-                           dist_to_robot])
-        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, 7))
+                            dist_to_robot,
+                            dist_center])
+        data['object'].x = torch.tensor(o_list, dtype=torch.float) if o_list else torch.empty((0, self.all_features['object']))
 
         # Walls nodes
         walls = dict['walls']
@@ -334,7 +340,7 @@ class SocNavHeteroDataset(Dataset):
                 w_list.append([wx, wy, math.sin(wa), math.cos(wa), dist_to_robot, la, 0.01])
             data['wall'].x = torch.tensor(w_list, dtype=torch.float)
         else:
-            data['wall'].x = torch.empty((0, 7))
+            data['wall'].x = torch.empty((0, self.all_features['wall']))
 
         context_values = []
         for c_key in dict['context'].keys():
@@ -468,47 +474,47 @@ class SocNavHeteroDataset(Dataset):
         
         spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
-        for i, type_a in enumerate(spatial_nodes):
-            if type_a!='robot':
-                continue
-            for type_b in spatial_nodes[i:]:
+        # for i, type_a in enumerate(spatial_nodes):
+        #     if type_a!='robot':
+        #         continue
+        #     for type_b in spatial_nodes[i:]:
 
-                if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
-                    continue
+        #         if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
+        #             continue
 
-                if data[type_a].x.numel() == 0 or data[type_b].x.numel() == 0:
-                    continue
+        #         if data[type_a].x.numel() == 0 or data[type_b].x.numel() == 0:
+        #             continue
 
-                pos_a = data[type_a].x[:, :2]
-                pos_b = data[type_b].x[:, :2]
+        #         pos_a = data[type_a].x[:, :2]
+        #         pos_b = data[type_b].x[:, :2]
 
-                if pos_a.numel() == 0 or pos_b.numel() == 0:
-                    continue
+        #         if pos_a.numel() == 0 or pos_b.numel() == 0:
+        #             continue
 
-                dists = torch.cdist(pos_a, pos_b)
+        #         dists = torch.cdist(pos_a, pos_b)
                 
-                if full_conexo:
-                    mask = torch.ones_like(dists, dtype=torch.bool)
-                else:
-                    mask = dists < dist_threshold
+        #         if full_conexo:
+        #             mask = torch.ones_like(dists, dtype=torch.bool)
+        #         else:
+        #             mask = dists < dist_threshold
 
-                # mask = mask.long()
+        #         # mask = mask.long()
                 
-                # if type_a == type_b:
-                #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
+        #         # if type_a == type_b:
+        #         #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
                 
-                edge_index = mask.nonzero(as_tuple=False).t()
+        #         edge_index = mask.nonzero(as_tuple=False).t()
                 
-                if edge_index.numel() > 0:
-                    edge_values = dists[mask].unsqueeze(1)
-                    rel_name = (type_a, 'near_to', type_b)
-                    data[rel_name].edge_index = edge_index.long()
-                    data[rel_name].edge_attr = edge_values
+        #         if edge_index.numel() > 0:
+        #             edge_values = dists[mask].unsqueeze(1)
+        #             rel_name = (type_a, 'near_to', type_b)
+        #             data[rel_name].edge_index = edge_index.long()
+        #             data[rel_name].edge_attr = edge_values
                     
-                    if type_a != type_b:
-                        rev_rel = (type_b, 'near_to', type_a)
-                        data[rev_rel].edge_index = edge_index.flip(0).long()
-                        data[rev_rel].edge_attr = edge_values   
+        #             if type_a != type_b:
+        #                 rev_rel = (type_b, 'near_to', type_a)
+        #                 data[rev_rel].edge_index = edge_index.flip(0).long()
+        #                 data[rev_rel].edge_attr = edge_values   
 
         edge_types_metadata = self.get_metadata()[1]  
 
@@ -518,6 +524,31 @@ class SocNavHeteroDataset(Dataset):
                 data[edge_type].edge_attr = torch.empty((0), dtype=torch.float)
 
         return data
+    
+    def mirror_sequence(self, sequence):
+        new_sequence = sequence
+
+        for frame in new_sequence:
+            frame['robot'].x[:,self.all_feature_names['robot'].index('y')] = -frame['robot'].x[:,self.all_feature_names['robot'].index('y')]
+            frame['robot'].x[:,self.all_feature_names['robot'].index('sin_a')] = -frame['robot'].x[:,self.all_feature_names['robot'].index('sin_a')]
+            frame['robot'].x[:,self.all_feature_names['robot'].index('vy')] = -frame['robot'].x[:,self.all_feature_names['robot'].index('vy')]
+            frame['robot'].x[:,self.all_feature_names['robot'].index('va')] = -frame['robot'].x[:,self.all_feature_names['robot'].index('va')]            
+            frame['robot'].x[:,self.all_feature_names['robot'].index('acc_y')] = -frame['robot'].x[:,self.all_feature_names['robot'].index('acc_y')]
+
+            frame['goal'].x[:,self.all_feature_names['goal'].index('y')] = -frame['goal'].x[:,self.all_feature_names['goal'].index('y')]
+            frame['goal'].x[:,self.all_feature_names['goal'].index('sin_a')] = -frame['goal'].x[:,self.all_feature_names['goal'].index('sin_a')]
+
+            frame['human'].x[:,self.all_feature_names['human'].index('y')] = -frame['human'].x[:,self.all_feature_names['human'].index('y')]
+            frame['human'].x[:,self.all_feature_names['human'].index('sin_a')] = -frame['human'].x[:,self.all_feature_names['human'].index('sin_a')]
+
+            frame['object'].x[:,self.all_feature_names['object'].index('y')] = -frame['object'].x[:,self.all_feature_names['object'].index('y')]
+            frame['object'].x[:,self.all_feature_names['object'].index('sin_a')] = -frame['object'].x[:,self.all_feature_names['object'].index('sin_a')]
+
+            frame['wall'].x[:,self.all_feature_names['wall'].index('y')] = -frame['wall'].x[:,self.all_feature_names['wall'].index('y')]
+            frame['wall'].x[:,self.all_feature_names['wall'].index('sin_a')] = -frame['wall'].x[:,self.all_feature_names['wall'].index('sin_a')]
+
+        return new_sequence
+
 
 
 def collate(batch):
