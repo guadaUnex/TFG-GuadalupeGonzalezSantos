@@ -76,7 +76,7 @@ class SocNavHeteroDataset(Dataset):
             'goal': ['x', 'y', 'sin_a', 'cos_a', 'th_pos', 'th_angle', 'dlin', 'dang'],
             'robot': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'vx', 'vy', 'va', 'acc_x', 'acc_y'],
             'human': ['x', 'y', 'sin_a', 'cos_a', 'd_robot', 'dcenter_r'],
-            'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot, dcenter_r'],
+            'object': ['x', 'y', 'sin_a', 'cos_a', 'w', 'l', 'd_robot', 'dcenter_r'],
             'wall': ['x', 'y', 'sin_a', 'cos_a', 'd_robot', 'w', 'l']
         }
 

@@ -113,6 +113,7 @@ class HybridModel(nn.Module):
 
     def forward(self, batch_data, slengths):
 
+
         gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
 
         scenarios = gnn_output['scenario']
