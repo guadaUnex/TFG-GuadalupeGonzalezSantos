@@ -199,7 +199,7 @@ class SocNavHomoDataset(Dataset):
         self.type_features = ['robot', 'goal', 'human', 'object', 'wall']
         self.robot_features = ['r_x', 'r_y','r_sin_a', 'r_cos_a', 'r_vx', 'r_vy', 
                                'r_va', 'r_acc_x', 'r_acc_y','r_w', 'r_l', 'success', 
-                               'path_eff', 'step_ratio', 'episode_end']
+                                'path_eff']# 'step_ratio', 'episode_end']
         self.goal_features = ['g_x', 'g_y','g_sin_a', 'g_cos_a', 
                               'th_pos', 'th_angle', 'dlin_gr', 'dang_gr']
 
@@ -245,8 +245,8 @@ class SocNavHomoDataset(Dataset):
         node_feats[self.all_features.index('r_l')] = dict['robot']['l'][index]
         node_feats[self.all_features.index('success')] = dict['computed_metrics']['success'][index]        
         node_feats[self.all_features.index('path_eff')] = dict['computed_metrics']['path_efficiency_ratio'][index]
-        node_feats[self.all_features.index('step_ratio')] = dict['computed_metrics']['step_ratio'][index]
-        node_feats[self.all_features.index('episode_end')] = dict['computed_metrics']['episode_end'][index]
+        # # node_feats[self.all_features.index('step_ratio')] = dict['computed_metrics']['step_ratio'][index]
+        # # node_feats[self.all_features.index('episode_end')] = dict['computed_metrics']['episode_end'][index]
         
 
         graph_feats.append(node_feats)

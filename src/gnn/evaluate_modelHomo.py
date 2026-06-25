@@ -115,7 +115,7 @@ with torch.no_grad():
 
         # Get predictions for the whole batch
         predictions = model(traj_batch, metrics_batch, seq_length)
-        print(predictions, label_batch)
+        # print(predictions, label_batch)
         loss_mse += mse_function(predictions, label_batch).item() * label_batch.shape[0]
         loss_mae += mae_function(predictions, label_batch).item() * label_batch.shape[0]
     
