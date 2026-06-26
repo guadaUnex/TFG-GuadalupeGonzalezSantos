@@ -39,8 +39,11 @@ class SocNavHomoDataset(Dataset):
 
         # Reading the dataset file
 
-        with open(os.path.join(data_path, data_list_file), 'r') as f:
-            self.file_names = f.read().splitlines()
+        if isinstance(data_list_file, str):
+            with open(os.path.join(data_path, data_list_file), 'r') as f:
+                self.file_names = f.read().splitlines()
+        else:
+            self.file_names = data_list_file
 
         self.MAX_TTC = 10
 
@@ -75,7 +78,10 @@ class SocNavHomoDataset(Dataset):
 
         self.timestamp_threshold = timestamp_threshold
 
-        nombre_carpeta = Path(self.data_list_file).stem
+        if isinstance(self.data_list_file, str):
+            nombre_carpeta = Path(self.data_list_file).stem
+        else:
+            nombre_carpeta = 'cache'
         self.carpeta_guardado = os.path.join(data_path, nombre_carpeta)
             
         super(SocNavHomoDataset, self).__init__(self.carpeta_guardado, transform, pre_transform, pre_filter)
@@ -116,7 +122,7 @@ class SocNavHomoDataset(Dataset):
         limit = 5
         count = 0
 
-        # print(self.raw_paths)
+        print(self.raw_paths)
 
         for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
             with open(raw_path, 'r', encoding='utf-8') as f:
