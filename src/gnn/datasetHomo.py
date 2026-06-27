@@ -141,6 +141,7 @@ class SocNavHomoDataset(Dataset):
 
             normalized_dict = metrics.normalize_features(full_dict, self.max_values)
 
+            # rating = normalized_dict['computed_metrics']['global_dist_nearest_hum'][-1]
             trayectoria = []
             traj_metrics = []
             for i in range(lenght):

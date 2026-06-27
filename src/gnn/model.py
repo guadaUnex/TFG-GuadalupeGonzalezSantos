@@ -113,8 +113,17 @@ class HybridModel(nn.Module):
 
     def forward(self, batch_data, slengths):
 
+        try:
+            gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
+        except AssertionError as e:
+            print('features')
+            for k, t in batch_data.x_dict:
+                print(k, t.shape)
+            print('edges')
+            for k, t in batch_data.edge_index_dict:
+                print(k, t.shape)
+            exit()
 
-        gnn_output = self.gnn_block(batch_data.x_dict, batch_data.edge_index_dict)
 
         scenarios = gnn_output['scenario']
 

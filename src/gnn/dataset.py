@@ -154,6 +154,9 @@ class SocNavHeteroDataset(Dataset):
 
             tensor_dict, lenght = sequence_to_tensor(json_data, self.timestamp_threshold, context)
 
+            if lenght<4:
+                continue
+
             tensor_dict_to_goal = tensor_transform_to_goal_fr(tensor_dict)
 
             full_dict = metrics.compute_metrics(tensor_dict_to_goal)
@@ -176,10 +179,10 @@ class SocNavHeteroDataset(Dataset):
                 self.labels.append(torch.tensor([rating], dtype=torch.float32))
                 self.slengths.append(torch.tensor(lenght, dtype=torch.long))
 
-            count += 1
+            # count += 1
 
-            if count == limit:
-                break
+            # if count == limit:
+            #     break
 
         # torch.save(
         #     {'trajectories': self.dataset, 'labels': self.labels, 'slength': self.slengths}, 
@@ -215,14 +218,14 @@ class SocNavHeteroDataset(Dataset):
                 # # ('object', 'near_to', 'goal'), 
                 # # ('goal', 'near_to', 'wall'), 
                 # # ('wall', 'near_to', 'goal'), 
-                # ('goal', 'near_to', 'robot'), 
-                # ('robot', 'near_to', 'goal'), 
-                # ('robot', 'near_to', 'wall'), 
-                # ('wall', 'near_to', 'robot'), 
-                # ('robot', 'near_to', 'human'), 
-                # ('human', 'near_to', 'robot'), 
-                # ('robot', 'near_to', 'object'), 
-                # ('object', 'near_to', 'robot'), 
+                ('goal', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'goal'), 
+                ('robot', 'near_to', 'wall'), 
+                ('wall', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'human'), 
+                ('human', 'near_to', 'robot'), 
+                ('robot', 'near_to', 'object'), 
+                ('object', 'near_to', 'robot'), 
                 # # ('human', 'near_to', 'human'), 
                 # # ('human', 'near_to', 'object'), 
                 # # ('object', 'near_to', 'human'), 
@@ -474,47 +477,47 @@ class SocNavHeteroDataset(Dataset):
         
         spatial_nodes = [t for t in node_types if t not in ['scenario']]
     
-        # for i, type_a in enumerate(spatial_nodes):
-        #     if type_a!='robot':
-        #         continue
-        #     for type_b in spatial_nodes[i:]:
+        for i, type_a in enumerate(spatial_nodes):
+            if type_a!='robot':
+                continue
+            for type_b in spatial_nodes[i:]:
 
-        #         if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
-        #             continue
+                if type_a == type_b == 'wall' or type_a == type_b == 'robot' or type_a == type_b == 'goal':
+                    continue
 
-        #         if data[type_a].x.numel() == 0 or data[type_b].x.numel() == 0:
-        #             continue
+                if data[type_a].x.numel() == 0 or data[type_b].x.numel() == 0:
+                    continue
 
-        #         pos_a = data[type_a].x[:, :2]
-        #         pos_b = data[type_b].x[:, :2]
+                pos_a = data[type_a].x[:, :2]
+                pos_b = data[type_b].x[:, :2]
 
-        #         if pos_a.numel() == 0 or pos_b.numel() == 0:
-        #             continue
+                if pos_a.numel() == 0 or pos_b.numel() == 0:
+                    continue
 
-        #         dists = torch.cdist(pos_a, pos_b)
+                dists = torch.cdist(pos_a, pos_b)
                 
-        #         if full_conexo:
-        #             mask = torch.ones_like(dists, dtype=torch.bool)
-        #         else:
-        #             mask = dists < dist_threshold
+                if full_conexo:
+                    mask = torch.ones_like(dists, dtype=torch.bool)
+                else:
+                    mask = dists < dist_threshold
 
-        #         # mask = mask.long()
+                # mask = mask.long()
                 
-        #         # if type_a == type_b:
-        #         #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
+                # if type_a == type_b:
+                #     mask = mask & (~torch.eye(pos_a.size(0), dtype=torch.bool))
                 
-        #         edge_index = mask.nonzero(as_tuple=False).t()
+                edge_index = mask.nonzero(as_tuple=False).t()
                 
-        #         if edge_index.numel() > 0:
-        #             edge_values = dists[mask].unsqueeze(1)
-        #             rel_name = (type_a, 'near_to', type_b)
-        #             data[rel_name].edge_index = edge_index.long()
-        #             data[rel_name].edge_attr = edge_values
+                if edge_index.numel() > 0:
+                    edge_values = dists[mask].unsqueeze(1)
+                    rel_name = (type_a, 'near_to', type_b)
+                    data[rel_name].edge_index = edge_index.long()
+                    data[rel_name].edge_attr = edge_values
                     
-        #             if type_a != type_b:
-        #                 rev_rel = (type_b, 'near_to', type_a)
-        #                 data[rev_rel].edge_index = edge_index.flip(0).long()
-        #                 data[rev_rel].edge_attr = edge_values   
+                    if type_a != type_b:
+                        rev_rel = (type_b, 'near_to', type_a)
+                        data[rev_rel].edge_index = edge_index.flip(0).long()
+                        data[rev_rel].edge_attr = edge_values   
 
         edge_types_metadata = self.get_metadata()[1]  
 
