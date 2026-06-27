@@ -1,7 +1,8 @@
 from PySide6.QtCore import Qt, QRectF, QLineF
-from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene
+from PySide6.QtWidgets import QApplication, QTableWidgetItem, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem
 from PySide6.QtUiTools import QUiLoader
 from PySide6.QtCore import QFile
+from PySide6.QtGui import QPen, QBrush
 from PySide6.QtGui import QPainter, QImage
 import numpy as np
 import sys
@@ -133,10 +134,19 @@ class MyView(QGraphicsView):
         self.scene.addLine(QLineF(rx, ry, rx+w*c, ry+w*s))#, pen=Qt.black)
 
         self.nodeItems['wall'] = []
-        for w in range(self.graph['wall'].x.shape[0]):
-            wx, wy = self.graph['wall'].x[w,0]*cvtFactor, self.graph['wall'].x[w,1]*cvtFactor
+        for wall in range(self.graph['wall'].x.shape[0]):
+            wx, wy = self.graph['wall'].x[wall,0]*cvtFactor, self.graph['wall'].x[wall,1]*cvtFactor
             r = 20
-            item = self.scene.addEllipse(wx - r/2, wy - r/2, r, r, brush=Qt.red)
+            w, l = self.graph['wall'].x[wall,5].item()*cvtFactor, self.graph['wall'].x[wall,6].item()*cvtFactor
+            s, c = self.graph['wall'].x[wall,2].item(), self.graph['wall'].x[wall,3].item()
+            entity = QGraphicsEllipseItem()
+            entity.setRect(QRectF(-l/2, -w/2, l, w))
+            entity.setPen(QPen(Qt.black))
+            entity.setBrush(QBrush(Qt.red, Qt.SolidPattern))
+            ang = np.atan2(s,c)*180/np.pi
+            entity.setRotation(ang)
+            entity.setPos(wx,wy)
+            item = self.scene.addItem(entity)
             self.nodeItems['wall'].append((item, (wx, wy)))
 
         self.nodeItems['human'] = []

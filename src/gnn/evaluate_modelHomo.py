@@ -76,18 +76,12 @@ if 'only_metrics' in checkpoint.keys():
 else:
     ONLY_METRICS = False    
 
-# print('only_gnn', ONLY_GNN)    
-
-# print('only_metrics', ONLY_METRICS)    
-# print(checkpoint['model_state_dict'])
 
 model = HybridModel(num_layers, gnn_input=gnn_input, gnn_output = gnn_output, rnn_hidden_channels= rnn_hidden_size, 
                     gnn_hidden_channels= gnn_hidden_size, rnn_type = RNN_TYPE, 
                     gnn_heads = gnn_heads, gnn_concat = gnn_concat, linear_layers = LINEAR_LAYERS, 
                     rnn_activation = ACTIVATION, context_vars = CONTEXT_FEATURES, metrics_vars = METRICS_FEATURES,
                     only_gnn = ONLY_GNN, only_metrics = ONLY_METRICS)
-
-
 
 model.load_state_dict(checkpoint['model_state_dict'], strict=True)
 model = model.to(device)

@@ -108,13 +108,6 @@ def train_model(rnn_data, gnn_data, num_layers,
     
     metrics_features = len(train_dataset.get_metrics_features())
 
-    # print(train_dataset.labels)
-    # ----------------------------------------
-    # for trajectories, test_labels, slengths in train_dataloader:
-    #     print("Muestra de etiquetas reales de tu dataset (primeros 10):", test_labels[:10].tolist())
-    #     print("Suma de etiquetas en este batch:", test_labels.sum().item())
-    #     print("Muestra de longitudes de secuencias (slengths):", slengths[:10].tolist())
-        # break # Solo miramos el primer batch para no saturar la consola
     print("---------------------------------")
 
 
@@ -188,22 +181,16 @@ def train_model(rnn_data, gnn_data, num_layers,
         for i_d, speed in enumerate(list(qual_loaders.keys())):
             q_preds = {}
             q_list = qual_loaders[speed]
-            # for file in q_list:
-            # print(f"File : {q_list}")
             for i, q_tuple in enumerate(q_list):
                 full_preds = []
-                # print(f"Q_tuple {i}:{len(q_tuple)}")
                 context, files, qual_loader, abbr_context = q_tuple
-                # print(f"Context :{context}, files: {files}, qual_loader: {qual_loader}")
                 with torch.no_grad():
-                    # print(f"======================\n{filename=}")
                     for trajectories, _, slengths in qual_loader:
                         # Pass the whole batched graph sequence to the model at once
                         trajectories = trajectories.to(device)
                         slengths = slengths.to(device)
                         preds = model(trajectories, slengths)
                         full_preds += preds.tolist()
-                # print(f"Predictions for Context {context}: \n {all_preds}")
                 q_preds[abbr_context] = full_preds
             for idx, context in enumerate(q_preds.keys()):
                 # axes_flat[idx] = plot_qualitative_ratings(q_preds[context], speed, context, COLORS[i_d], ax=axes_flat[idx])
@@ -339,7 +326,6 @@ rnn_data = {
 }
 
 def get_qual_loader(file_path):
-    # print(f"Processing file: {file_path}")
     q_loaders = []
     with open(file_path) as set_file:
         files = set_file.read().splitlines()

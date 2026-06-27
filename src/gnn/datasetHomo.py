@@ -13,23 +13,9 @@ from data_normalization import tensor_transform_to_goal_fr
 import metrics
 
 class SocNavHomoDataset(Dataset):
-    """Homogeneous Dataset for Social Navigation. 
-
-    It loads social navigation scenarios trajectories from JSON files and transforms
-    the data into temporary sequences of homogeneous graphs (`Data`).
-
-    Attributes:
-    data_list_file (str): Name of the file that contains the names of the trajectories files.
-    file_names (list): List of JSON-to-process names.
-    context_df (pd.DataFrame): DataFrame with context feature vectors. 
-    transformer (GoalFrameTransform): Module for spatial transformations and normalization.
-    dataset (list): Memory struture for storing the proccessed trajectories.
-    timestamp_threshold (float): Maximum allowed time interval between consecutive frames.
-        """
     
     def __init__(self, data_list_file, data_path='../../../dataset/labeled', context_path = '../../../dataset/contexts/anthropic_claude_context.csv', 
                    overwrite_contexts = '', transform=None, pre_transform=None, pre_filter=None, timestamp_threshold = 0.1, reload=False, data_augmentation = False):
-        """Inicializa los parámetros del dataset y gestiona la carga de la caché procesada."""
 
         print("Iniciando creación del siguiente dataset: ", data_list_file)
         
@@ -104,7 +90,6 @@ class SocNavHomoDataset(Dataset):
     @property
     def raw_dir(self):
         return self.trajectories_dir
-        # return os.path.join(os.path.dirname(os.path.dirname(self.root)), 'labeled')
     
     @property
     def processed_dir(self):
@@ -113,10 +98,8 @@ class SocNavHomoDataset(Dataset):
     def process(self):
         print("Creando nuevo dataset desde trayectorias en crudo")
         # Limites de pruebas
-        limit = 5
-        count = 0
-
-        # print(self.raw_paths)
+        # limit = 10
+        # count = 0
 
         for raw_path in tqdm(self.raw_paths, total=len(self.raw_paths), desc="Procesando JSONs"):            
             with open(raw_path, 'r', encoding='utf-8') as f:
@@ -218,9 +201,7 @@ class SocNavHomoDataset(Dataset):
 
     def _json_to_graph(self, dict, index, full_conexo=True):
 
-
         num_node_features = len(self.all_features)
-        # x = torch.zeros((num_nodes, num_node_features), dtype=torch.float32)
 
         entity_idx = {}
         graph_feats = []
@@ -247,7 +228,6 @@ class SocNavHomoDataset(Dataset):
         node_feats[self.all_features.index('path_eff')] = dict['computed_metrics']['path_efficiency_ratio'][index]
         # # node_feats[self.all_features.index('step_ratio')] = dict['computed_metrics']['step_ratio'][index]
         # # node_feats[self.all_features.index('episode_end')] = dict['computed_metrics']['episode_end'][index]
-        
 
         graph_feats.append(node_feats)
 
@@ -280,19 +260,12 @@ class SocNavHomoDataset(Dataset):
                 py = dict['people']['y'][index, i].item()
                 pa = dict['people']['a'][index, i].item()
                 dist_to_robot = dict['metrics']['dist_human'][index, i].item()
-                # if index>0 and dict['people']['id'][index][i] == dict['people']['id'][index-1][i]:
-                #     diff_time = dict['timestamp'][index]-dict['timestamp'][index-1]
-                #     vx = (px-dict['people']['x'][index-1, i].item())/diff_time
-                #     vy = (py-dict['people']['y'][index-1, i].item())/diff_time
-                # else:
-                #     vx = 0.
-                #     vy = 0.
+
                 dcenter_to_robot = math.sqrt((px-rx)**2+(py-ry)**2)
                 node_feats[self.all_features.index('human')] = 1.
                 node_feats[self.all_features.index('h_x')] = px
                 node_feats[self.all_features.index('h_y')] = py
-                # node_feats[self.all_features.index('vx')] = vx
-                # node_feats[self.all_features.index('vy')] = vy
+
                 node_feats[self.all_features.index('h_sin_a')] = math.sin(pa)
                 node_feats[self.all_features.index('h_cos_a')] = math.cos(pa)
                 node_feats[self.all_features.index('dist_hr')] = dist_to_robot
@@ -338,7 +311,6 @@ class SocNavHomoDataset(Dataset):
                 wx = pt[0]
                 wy = pt[1]
                 dist_to_robot = dict['metrics']['dist_walls'][index, idW].item()
-                # dist_to_robot = math.sqrt((wx-rx)**2+(wy-ry)**2)
                 node_feats[self.all_features.index('wall')] = 1.
                 node_feats[self.all_features.index('w_x')] = wx
                 node_feats[self.all_features.index('w_y')] = wy
@@ -533,6 +505,5 @@ def collate(batch):
     metrics_tensor = torch.cat(metrics, dim=0)  
     labels_tensor = torch.stack(labels)  
     slengths_tensor = torch.stack(sequence_lengths)
-
 
     return batched_graphs, metrics_tensor, labels_tensor, slengths_tensor

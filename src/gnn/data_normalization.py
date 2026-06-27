@@ -56,7 +56,6 @@ def tensor_transform_to_goal_fr(tDict_sequence):
     else:
         people = tDict_sequence['people']
 
-
     if torch.numel(tDict_sequence['objects']['exists'])>0:
         ox = tDict_sequence['objects']['x']
         oy = tDict_sequence['objects']['y']
@@ -120,7 +119,6 @@ def tensor_transform_to_goal_fr(tDict_sequence):
                     'walls': walls,
                     'metrics': metrics_ft,
                     'context': context}
-
 
     return tensor_dict
 
