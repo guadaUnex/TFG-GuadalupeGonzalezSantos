@@ -69,13 +69,7 @@ class HybridModel(nn.Module):
         self.gnn_block = GAT(gnn_hidden_channels, gnn_output)
         # self.gnn_block = GNNModel(gnn_hidden_channels, gnn_heads, gnn_output, gnn_concat)
 
-
-        # print("metadata")
-        # print(gnn_metadata)
         self.gnn_block = to_hetero(self.gnn_block, gnn_metadata, aggr='sum')
-
-        # print(self.gnn_block)
-        # exit()
 
         self.defineRnnBlock(rnn_type, rnn_hidden_channels, linear_layers, rnn_activation, rnn_dropout)
 
@@ -157,7 +151,6 @@ class HybridModel(nn.Module):
 
         out = rnn_output[torch.arange(rnn_output.shape[0]), slengths - 1]
 
-        # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = batch_data.x_dict['scenario'][first_graph_idx, -self.context_vars:]
             out = torch.concat((out, batch_context), axis=1)

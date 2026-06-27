@@ -16,7 +16,6 @@ parser.add_argument('--dataroot', type=str, nargs="?", default='.', help="Data r
 
 args = parser.parse_args()
 
-
 checkpoint_path = args.model
 print(checkpoint_path)
 model_name = checkpoint_path

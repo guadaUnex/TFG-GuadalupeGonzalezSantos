@@ -172,7 +172,6 @@ class HybridModel(nn.Module):
 
         # out = self.rnnNorm(out)
 
-        # print('output shape', out.shape)
         if self.context_vars > 0:
             batch_context = context_seq[:, 0, :]
             out = torch.concat((out, batch_context), axis=1)

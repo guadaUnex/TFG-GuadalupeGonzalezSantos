@@ -46,6 +46,7 @@ def get_wall_distance(r_x, r_y, r_radius, w_x1, w_y1, w_x2, w_y2):
 
 SOCIAL_SPACE_THRESHOLD = 0.4
 
+
 def dist_to_humans(frame):
     r_x, r_y = frame['robot']['x'], frame['robot']['y']
     r_radius = frame['robot']['shape']['length']/2. 
@@ -60,7 +61,6 @@ def dist_to_humans(frame):
         d_humans.append(dist_to_robot)
     
     return d_humans
-
 
 
 def dist_to_objects(frame):
@@ -78,6 +78,7 @@ def dist_to_objects(frame):
     
     return d_objects
 
+
 def dist_to_walls(frame, walls):
     r_x, r_y = frame['robot']['x'], frame['robot']['y']
     r_radius = frame['robot']['shape']['length']/2. 
@@ -90,6 +91,7 @@ def dist_to_walls(frame, walls):
         d_walls.append(w_dist)
     
     return d_walls
+
 
 def get_ttc(cur_frame, prev_frame):
     robot_pose = np.array([cur_frame['robot']['x'], cur_frame['robot']['y']])
@@ -133,7 +135,6 @@ def get_ttc(cur_frame, prev_frame):
             if C_dot_V > 0:
                 V_sq = V.dot(V)
                 f = (C_dot_V * C_dot_V) - (V_sq * (C_sq - radii_sum_sq))
-                # print(f"C_dot_v :{C_dot_V}, f :{f}, V_sq :{V_sq}")
                 if f > 0:
                     ttc = (C_dot_V - np.sqrt(f)) / V_sq
                 else:
@@ -154,6 +155,7 @@ def get_ttc(cur_frame, prev_frame):
         calc_metrics.append(current_metrics)       
         
     return calc_metrics
+
 
 def compute_metrics(tDict_sequence):
 
@@ -283,6 +285,7 @@ def compute_metrics(tDict_sequence):
     tDict_sequence['computed_metrics'] = metrics_dict
 
     return tDict_sequence
+
 
 def normalize_features(tDict_sequence, max_values):
     for key, value in tDict_sequence.items():

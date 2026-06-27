@@ -90,10 +90,6 @@ if 'only_metrics' in checkpoint.keys():
 else:
     ONLY_METRICS = False    
 
-# print('only_gnn', ONLY_GNN)    
-
-# print('only_metrics', ONLY_METRICS)    
-# print(checkpoint['model_state_dict'])
 
 model = HybridModel(num_layers, gnn_input=gnn_input, gnn_output = gnn_output, rnn_hidden_channels= rnn_hidden_size, 
                     gnn_hidden_channels= gnn_hidden_size, rnn_type = RNN_TYPE, 
@@ -155,11 +151,8 @@ for i_d, d in enumerate(FILES):
         actual_labels = []
         val_loss = 0
         distances = []
-        # print(qual_set.dataset)
-        # print('----------')
         with torch.no_grad():
             for trajectories, metrics, _, slengths in qual_loader:
-                # print(slengths)
                 global_i = 0
                 for t in slengths:
                     distances_t = []
@@ -183,7 +176,6 @@ for i_d, d in enumerate(FILES):
                 slengths = slengths.to(device)
                 preds = model(trajectories, metrics, slengths)
                 predictions += preds.tolist()
-            # print(distances)
         sort_idx = np.argsort(np.array(distances))
         idx = np.arange(0, len(predictions), sample_step)
         q_indices[abbreviated_context] = np.array(distances)#[sort_idx]
